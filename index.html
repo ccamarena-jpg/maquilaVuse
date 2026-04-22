@@ -216,22 +216,42 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-100);color:var(--gra
     <div class="prod-cell"><div class="prod-value" id="prod-devices">0</div><div class="prod-label">Devices Reempacados</div></div>
     <div class="prod-cell"><div class="prod-value" id="prod-obs">0</div><div class="prod-label">Observaciones Nuevas</div></div>
   </div>
-  <div class="panels-grid">
-    <div class="panel">
-      <div class="panel-header"><span class="panel-title">Avance por SKU</span><button class="btn-add-task editor-only" onclick="openSkuModal()">+ Actualizar</button></div>
-      <div class="tab-row">
-        <div class="inner-tab active" onclick="switchInnerTab('impresion',this)">Impresi&#243;n</div>
-        <div class="inner-tab" onclick="switchInnerTab('repack',this)">Maquila / Repack</div>
-      </div>
-      <div id="tab-impresion" class="inner-tab-content active"><table class="sku-table"><thead><tr><th>SKU / Descripci&#243;n</th><th>Prior.</th><th style="text-align:right">Avance Packs</th><th style="text-align:right">% Avance</th></tr></thead><tbody id="sku-impresion-body"></tbody></table></div>
-      <div id="tab-repack" class="inner-tab-content"><table class="sku-table"><thead><tr><th>SKU / Descripci&#243;n</th><th>Prior.</th><th style="text-align:right">Devices Repack</th><th style="text-align:right">% Avance</th></tr></thead><tbody id="sku-repack-body"></tbody></table></div>
+  <!-- IMPRESION SECTION -->
+  <div class="section-label">&#128222; Impresi&#243;n de Packs <button class="btn-add-task editor-only" style="margin-left:12px;font-size:11px;padding:5px 12px" onclick="openSkuModal()">+ Registrar Avance</button></div>
+  <div class="panel" style="margin-bottom:24px">
+    <div class="panel-header">
+      <span class="panel-title">Avance Impresi&#243;n por SKU</span>
     </div>
-    <div class="panel">
-      <div class="panel-header"><span class="panel-title">Registro de Observaciones</span><span class="panel-count" id="obs-count-badge">0 registros</span></div>
-      <div style="overflow-y:auto;max-height:400px">
-        <table class="obs-table"><thead><tr><th>Fecha</th><th>SKU</th><th>Descripci&#243;n</th><th>Tipo</th><th style="text-align:right">Cant.</th></tr></thead><tbody id="obs-body"></tbody></table>
-        <button class="btn-add editor-only" onclick="openObsModal()">+ Nueva Observaci&#243;n</button>
-      </div>
+    <table class="sku-table">
+      <thead>
+        <tr>
+          <th style="text-align:left">Descripci&#243;n</th>
+          <th style="text-align:right">Total Packs</th>
+          <th style="text-align:right">Impresos</th>
+          <th style="text-align:right;min-width:120px">Avance</th>
+        </tr>
+      </thead>
+      <tbody id="imp-body"></tbody>
+    </table>
+  </div>
+
+  <!-- MAQUILA SECTION -->
+  <div class="section-label">&#128230; Maquila / Repack <button class="btn-add-task editor-only" style="margin-left:12px;font-size:11px;padding:5px 12px" onclick="saveMaquilaData()">&#128190; Guardar Maquila</button></div>
+  <div class="panel" style="margin-bottom:24px">
+    <div style="overflow-x:auto">
+      <table class="sku-table" id="maquila-table" style="min-width:900px;border-collapse:collapse">
+        <thead id="maquila-header"></thead>
+        <tbody id="maquila-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- OBSERVACIONES -->
+  <div class="section-label">&#128221; Registro de Observaciones <span class="panel-count" id="obs-count-badge" style="margin-left:12px">0 registros</span><button class="btn-add-task editor-only" style="margin-left:12px;background:var(--gray-200);color:var(--gray-900);font-size:11px;padding:5px 12px" onclick="openObsModal()">+ Nueva</button></div>
+  <div class="panel" style="margin-top:8px">
+    <div style="overflow-y:auto;max-height:180px">
+      <table class="obs-table"><thead><tr><th>Fecha</th><th>SKU</th><th>Descripci&#243;n</th><th>Tipo</th><th style="text-align:right">Cant.</th></tr></thead><tbody id="obs-body"></tbody></table>
+      <div id="obs-empty" style="padding:16px;text-align:center;color:var(--gray-600);font-size:12px">Sin observaciones registradas</div>
     </div>
   </div>
 </div>
@@ -239,7 +259,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-100);color:var(--gra
 <div id="view-gantt" class="view">
 <div class="gantt-section">
     <div class="gantt-header"><span class="gantt-title">Gantt de Ejecuci&#243;n &mdash; Impresi&#243;n y Maquila / Repack</span></div>
-    <div class="gantt-hint" id="gantt-hint" style="display:none">&#9998; Clic en cada celda para activar/desactivar d&#237;a. El nombre de actividad tambi&#233;n es editable.</div>
+    <div class="gantt-hint" id="gantt-hint" style="display:none">&#9998; Clic en una celda para editar la cantidad diaria. Presiona Enter para confirmar, Esc para cancelar. El nombre de actividad también es editable.</div>
     <div class="gantt-wrap">
       <table class="gantt-table">
         <thead>
@@ -261,6 +281,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-100);color:var(--gra
             <th class="d hl">VIE<br>1-May</th>
             <th class="d wk">S&#193;B<br>2-May</th><th class="d wk">DOM<br>3-May</th>
             <th class="d">LUN<br>4-May</th><th class="d">MAR<br>5-May</th>
+            <th class="num">TOTAL</th>
           </tr>
         </thead>
         <tbody id="gantt-body"></tbody>
@@ -327,18 +348,21 @@ var currentUser = null;
 // 15 cols: 0=21abr 1=22 2=23 3=24 4=25sab 5=26dom 6=27 7=28 8=29 9=30 10=1may(F) 11=2maysab 12=3maydom 13=4may 14=5may
 var COL_TYPES=['work','work','work','work','work','dom','work','work','work','work','feriado','work','dom','work','work'];
 
+// GANTT_ROWS: days = array of 15 daily production values (0 = no work)
+// cols: 0=21abr 1=22 2=23 3=24 4=25sab 5=26dom 6=27 7=28 8=29 9=30 10=1may(F) 11=2maysab 12=3maydom 13=4may 14=5may
 var GANTT_ROWS=[
-  {label:'IMPRESIÓN PACKS',   packs:'12,380.00', days:[1,1,1,1,1,0,0,1,1,0,0,0,0,0,0], color:'#F2C080'},
-  {label:'PRIORIDAD 1 (3,730)',packs:'3,730.00',  days:[1,1,1,1,0,0,0,1,1,1,0,0,0,0,0], color:'#F4A95B'},
-  {label:'PRIORIDAD 2 (3,580)',packs:'3,580.00',  days:[1,1,1,1,0,0,0,1,1,1,0,0,0,0,0], color:'#F4A95B'},
-  {label:'PRIORIDAD 3 (5,070)',packs:'5,070.00',  days:[1,1,1,1,0,0,0,1,1,0,0,0,0,0,0], color:'#F4A95B'}
+  {label:'IMPRESIÓN PACKS',           packs:'12,380', days:[0,0,0,2000,1000,0,2080,2000,2000,2000,0,1000,0,300,0], color:'#F2C080'},
+  {label:'VUSE GO 1K STRAWBERRY ICE', packs:'3,580',  days:[0,0,0,2000,1000,0,580, 0,   0,   0,   0,0,   0,0,  0], color:'#6BC97A'},
+  {label:'VUSE 3K GRAPE ICE',         packs:'2,060',  days:[0,0,0,0,   0,   0,1500,560, 0,   0,   0,0,   0,0,  0], color:'#6BC97A'},
+  {label:'VUSE 3K GREEN APPLE',       packs:'5,070',  days:[0,0,0,0,   0,   0,0,   1440,2000,1630,0,1000,0,0,  0], color:'#6BC97A'},
+  {label:'VUSE 3K BLUEBERRY ICE',     packs:'1,670',  days:[0,0,0,0,   0,   0,0,   0,   0,   370, 0,0,   0,300,0], color:'#6BC97A'}
 ];
 
 var SKUS=[
-  {name:'VUSE 3K Blueberry Ice',   sku:'10227738',total:1670,prioridad:1,packsImpresion:0,devicesRepack:0},
-  {name:'VUSE 3K Grape Ice',        sku:'10225295',total:2060,prioridad:1,packsImpresion:0,devicesRepack:0},
-  {name:'VUSE GO 1K Strawberry Ice',sku:'10208401',total:3580,prioridad:2,packsImpresion:0,devicesRepack:0},
-  {name:'VUSE 3K Green Apple',      sku:'10225303',total:5070,prioridad:3,packsImpresion:0,devicesRepack:0}
+  {name:'VUSE GO 1K Strawberry Ice',sku:'10208401',totalDevices:3580,totalPacks:358, prioridad:1,packsImpresion:0,devicesRepack:0},
+  {name:'VUSE 3K Grape Ice',        sku:'10225295',totalDevices:2060,totalPacks:206, prioridad:1,packsImpresion:0,devicesRepack:0},
+  {name:'VUSE 3K Green Apple',      sku:'10225303',totalDevices:5070,totalPacks:507, prioridad:2,packsImpresion:0,devicesRepack:0},
+  {name:'VUSE 3K Blueberry Ice',   sku:'10227738',totalDevices:1670,totalPacks:167, prioridad:2,packsImpresion:0,devicesRepack:0}
 ];
 var TOTAL_DEVICES=12380;
 var observations=[], skuLog=[];
@@ -425,9 +449,6 @@ function loadFromSheet() {
         if(!r[0]) continue;
         var fecha = typeof r[0]==='object' ? r[0].toISOString().split('T')[0] : String(r[0]);
         skuLog.push({fecha:fecha, sku:String(r[1]), skuName:String(r[2]), packs:parseInt(r[3])||0, devices:parseInt(r[4])||0, notas:String(r[5]||'')});
-        // Apply to SKUS totals
-        var idx = SKUS.findIndex(function(s){return s.sku===String(r[1])});
-        if(idx>=0){ SKUS[idx].packsImpresion+=parseInt(r[3])||0; SKUS[idx].devicesRepack+=parseInt(r[4])||0; }
       }
     }
 
@@ -485,7 +506,8 @@ function doLogout() {
 function isEditor(){ return currentUser && currentUser.role==='editor'; }
 
 // ===== GANTT =====
-function countActiveDays(days){ return days.reduce(function(s,d){return s+d},0); }
+function countActiveDays(days){ return days.reduce(function(s,d){return s+(d>0?1:0)},0); }
+function sumDays(days){ return days.reduce(function(s,d){return s+d},0); }
 
 function renderGanttTable() {
   var tb = document.getElementById('gantt-body');
@@ -493,7 +515,7 @@ function renderGanttTable() {
   var canEdit = isEditor();
   document.getElementById('gantt-hint').style.display = canEdit ? 'block' : 'none';
   GANTT_ROWS.forEach(function(row, ri) {
-    var rbg = ri%2===0 ? '#FFFFFF' : '#F5F6F8';
+    var rbg = ri===0 ? '#FFF8EE' : ri%2===0 ? '#FFFFFF' : '#F5F6F8';
     var cells = '';
     for(var c=0; c<15; c++) {
       var ct = COL_TYPES[c];
@@ -501,29 +523,75 @@ function renderGanttTable() {
       var bg = '#FFFFFF';
       if(ct==='dom') bg='#C8C8C8';
       else if(ct==='feriado') bg='#8B1A1A';
-      else if(row.days[c]===1) bg=row.color;
+      else if(row.days[c]>0) bg=row.color;
       var cls = 'd' + ((!locked&&canEdit)?' clickable':'');
-      var oc = (!locked&&canEdit) ? ' onclick="toggleGanttCell('+ri+','+c+',this)"' : '';
-      var title = ct==='dom'?'Domingo - no laborable':ct==='feriado'?'Feriado - 1 de Mayo':canEdit?'Clic para activar/desactivar':'';
-      cells += '<td class="'+cls+'" style="background:'+bg+'" title="'+title+'"'+oc+'></td>';
+      var valStr = row.days[c]>0 ? row.days[c].toLocaleString() : '';
+      var fontColor = (ct==='feriado') ? '#fff' : '#1A1E27';
+      var fontSize = '10px';
+      var title = ct==='dom'?'Domingo':ct==='feriado'?'Feriado 1-May':canEdit?'Clic para editar':'';
+      if(!locked && canEdit) {
+        cells += '<td class="'+cls+'" style="background:'+bg+';color:'+fontColor+';font-size:'+fontSize+';text-align:center;cursor:pointer" title="'+title+'" onclick="editGanttCell('+ri+','+c+',this)">'+valStr+'</td>';
+      } else {
+        cells += '<td class="'+cls+'" style="background:'+bg+';color:'+fontColor+';font-size:'+fontSize+';text-align:center">'+valStr+'</td>';
+      }
     }
     var ro = canEdit ? '' : ' readonly';
     var oc2 = canEdit ? ' onchange="updateRowLabel('+ri+',this.value)"' : '';
-    var actCell = '<td class="act" style="background:'+rbg+'"><input class="act-input" value="'+row.label+'"'+ro+oc2+'></td>';
+    var actCell = '<td class="act" style="background:'+rbg+';font-weight:'+(ri===0?'700':'500')+'"><input class="act-input" value="'+row.label+'"'+ro+oc2+'></td>';
+    var total = sumDays(row.days);
     var dias = countActiveDays(row.days);
-    tb.innerHTML += '<tr style="background:'+rbg+'">'+actCell+'<td class="num" style="background:'+rbg+'">'+row.packs+'</td><td class="num" id="dias-'+ri+'" style="background:'+rbg+'">'+dias.toFixed(2)+'</td>'+cells+'</tr>';
+    tb.innerHTML += '<tr style="background:'+rbg+'">'+actCell+'<td class="num" style="background:'+rbg+'">'+row.packs+'</td><td class="num" id="dias-'+ri+'" style="background:'+rbg+'">'+dias+'</td>'+cells+'<td class="num" style="background:'+rbg+';font-weight:600;color:var(--navy)">'+total.toLocaleString()+'</td></tr>';
   });
+  // Total row
+  var totalRow = '<tr style="background:#E8EAED;font-weight:700">';
+  totalRow += '<td class="act" style="background:#E8EAED;font-weight:700"><input class="act-input" value="TOTAL" readonly style="font-weight:700"></td>';
+  totalRow += '<td class="num" style="background:#E8EAED">12,080</td><td class="num" style="background:#E8EAED">-</td>';
+  var dayTotals = new Array(15).fill(0);
+  GANTT_ROWS.forEach(function(r){ r.days.forEach(function(v,i){ dayTotals[i]+=v; }); });
+  var grandTotal = 0;
+  dayTotals.forEach(function(v,i){
+    var ct = COL_TYPES[i];
+    var bg = ct==='dom'?'#C8C8C8':ct==='feriado'?'#8B1A1A':'#E8EAED';
+    var fc = ct==='feriado'?'#fff':'#1A1E27';
+    totalRow += '<td style="background:'+bg+';color:'+fc+';font-size:10px;text-align:center;font-weight:700">'+(v>0?v.toLocaleString():'')+'</td>';
+    grandTotal += v;
+  });
+  totalRow += '<td class="num" style="background:#E8EAED;font-weight:700;color:var(--navy)">'+grandTotal.toLocaleString()+'</td></tr>';
+  tb.innerHTML += totalRow;
 }
 
-function toggleGanttCell(ri, ci, td) {
+function editGanttCell(ri, ci, td) {
   if(!isEditor()) return;
   if(COL_TYPES[ci]==='dom'||COL_TYPES[ci]==='feriado') return;
-  GANTT_ROWS[ri].days[ci] = GANTT_ROWS[ri].days[ci]===1 ? 0 : 1;
-  td.style.background = GANTT_ROWS[ri].days[ci]===1 ? GANTT_ROWS[ri].color : '#FFFFFF';
-  var dc = document.getElementById('dias-'+ri);
-  if(dc) dc.textContent = countActiveDays(GANTT_ROWS[ri].days).toFixed(2);
-  // Save to sheet
-  apiPost({action:'save_gantt_cell', ri:ri, ci:ci, value:GANTT_ROWS[ri].days[ci]}, null);
+  var cur = GANTT_ROWS[ri].days[ci];
+  // Create inline input
+  var inp = document.createElement('input');
+  inp.type = 'number';
+  inp.value = cur || '';
+  inp.min = '0';
+  inp.style.cssText = 'width:52px;border:none;outline:2px solid var(--navy);background:transparent;font-size:11px;font-family:DM Mono,monospace;text-align:center;padding:2px;border-radius:3px;color:#1A1E27';
+  td.innerHTML = '';
+  td.appendChild(inp);
+  inp.focus();
+  inp.select();
+
+  function commit() {
+    var val = parseInt(inp.value)||0;
+    GANTT_ROWS[ri].days[ci] = val;
+    td.innerHTML = val>0 ? val.toLocaleString() : '';
+    td.style.background = val>0 ? GANTT_ROWS[ri].color : (COL_TYPES[ci]==='feriado'?'#8B1A1A':'#FFFFFF');
+    var dc = document.getElementById('dias-'+ri);
+    if(dc) dc.textContent = countActiveDays(GANTT_ROWS[ri].days);
+    // Update total row inline
+    renderGanttTable();
+    apiPost({action:'save_gantt_cell', ri:ri, ci:ci, value:val}, null);
+  }
+  inp.addEventListener('blur', commit);
+  inp.addEventListener('keydown', function(e){
+    if(e.key==='Enter') { inp.blur(); }
+    if(e.key==='Escape') { inp.value=cur||''; inp.blur(); }
+    e.stopPropagation();
+  });
 }
 
 function updateRowLabel(ri, val) {
@@ -581,12 +649,10 @@ document.querySelectorAll('.modal-overlay').forEach(function(o){
 function saveSKUProgress() {
   var val=document.getElementById('form-sku-name').value.split('|');
   var skuName=val[0], skuCode=val[1];
-  var idx=SKUS.findIndex(function(s){return s.name===skuName});
   var packs=parseInt(document.getElementById('form-sku-packs').value)||0;
   var devices=parseInt(document.getElementById('form-sku-devices').value)||0;
   var fecha=document.getElementById('form-sku-fecha').value;
   var notas=document.getElementById('form-sku-notas').value;
-  if(idx>=0){ SKUS[idx].packsImpresion+=packs; SKUS[idx].devicesRepack+=devices; }
   var entry={fecha:fecha,sku:skuCode,skuName:skuName,packs:packs,devices:devices,notas:notas};
   skuLog.push(entry);
   // Save to sheet
@@ -614,71 +680,318 @@ function saveObservation() {
   renderObservations(); updateKPIs();
 }
 
-// ===== RENDER =====
-function renderReport(){ renderSKUTable(); updateKPIs(); }
-function renderSKUTable() {
-  var ib=document.getElementById('sku-impresion-body');
-  var rb=document.getElementById('sku-repack-body');
-  ib.innerHTML=rb.innerHTML='';
-  SKUS.forEach(function(sku){
-    var pP=sku.total>0?Math.round(sku.packsImpresion/sku.total*100):0;
-    var pR=sku.total>0?Math.round(sku.devicesRepack/sku.total*100):0;
-    var fc=function(p){return p>=90?'fill-green':p>=50?'fill-amber':'fill-red'};
-    var pc=function(p){return p>=90?'pct-green':p>=50?'pct-amber':'pct-red'};
-    var bc=sku.prioridad===1?'pri-1':sku.prioridad===2?'pri-2':'pri-3';
-    var prog=function(p){return '<div class="progress-wrap"><div class="progress-bar"><div class="progress-fill '+fc(p)+'" style="width:'+p+'%"></div></div><span class="'+pc(p)+' pct-text">'+p+'%</span></div>'};
-    ib.innerHTML+='<tr><td>'+sku.name+'</td><td><span class="priority-badge '+bc+'">'+sku.prioridad+'</span></td><td style="text-align:right;font-family:DM Mono,monospace">'+sku.packsImpresion.toLocaleString()+'</td><td>'+prog(pP)+'</td></tr>';
-    rb.innerHTML+='<tr><td>'+sku.name+'</td><td><span class="priority-badge '+bc+'">'+sku.prioridad+'</span></td><td style="text-align:right;font-family:DM Mono,monospace">'+sku.devicesRepack.toLocaleString()+'</td><td>'+prog(pR)+'</td></tr>';
+// ===== MAQUILA DATA (editable in-table) =====
+// maquilaData[skuCode][dateKey] = devices number
+var maquilaData = {}; // devices per sku per date
+var maquilaBoxData = {}; // boxes per sku per date
+
+// Maquila columns start from 24-Apr
+var MAQUILA_COLS=[
+  {key:'2026-04-24',label:'VIE<br>24-Abr',type:'work'},
+  {key:'2026-04-25',label:'SÁB<br>25-Abr',type:'work'},
+  {key:'2026-04-26',label:'DOM<br>26-Abr',type:'dom'},
+  {key:'2026-04-27',label:'LUN<br>27-Abr',type:'work'},
+  {key:'2026-04-28',label:'MAR<br>28-Abr',type:'work'},
+  {key:'2026-04-29',label:'MIÉ<br>29-Abr',type:'work'},
+  {key:'2026-04-30',label:'JUE<br>30-Abr',type:'work'},
+  {key:'2026-05-01',label:'VIE<br>1-May',type:'feriado'},
+  {key:'2026-05-02',label:'SÁB<br>2-May',type:'work'},
+  {key:'2026-05-03',label:'DOM<br>3-May',type:'dom'},
+  {key:'2026-05-04',label:'LUN<br>4-May',type:'work'}
+];
+
+// Init maquilaData from existing skuLog (devices field)
+function initMaquilaFromLog() {
+  maquilaData = {};
+  maquilaBoxData = {};
+  SKUS.forEach(function(s){ maquilaData[s.sku]={}; maquilaBoxData[s.sku]={}; });
+  skuLog.forEach(function(l){
+    if(!maquilaData[l.sku]) maquilaData[l.sku]={};
+    if(!maquilaBoxData[l.sku]) maquilaBoxData[l.sku]={};
+    if(l.devices>0) {
+      if(!maquilaData[l.sku][l.fecha]) maquilaData[l.sku][l.fecha]=0;
+      maquilaData[l.sku][l.fecha] += l.devices;
+    }
+    if(l.boxes>0) {
+      if(!maquilaBoxData[l.sku][l.fecha]) maquilaBoxData[l.sku][l.fecha]=0;
+      maquilaBoxData[l.sku][l.fecha] += l.boxes;
+    }
   });
 }
+
+function saveMaquilaData() {
+  // Read all inputs from the maquila table and sync to maquilaData/maquilaBoxData + skuLog
+  if(!isEditor()) return;
+  var devInputs = document.querySelectorAll('#maquila-body input[data-field="dev"]');
+  var boxInputs = document.querySelectorAll('#maquila-body input[data-field="box"]');
+  var toSave = [];
+  devInputs.forEach(function(inp){
+    var skuCode = inp.getAttribute('data-sku');
+    var dateKey = inp.getAttribute('data-date');
+    var val = parseInt(inp.value)||0;
+    var prev = maquilaData[skuCode]&&maquilaData[skuCode][dateKey]||0;
+    if(val !== prev) {
+      if(!maquilaData[skuCode]) maquilaData[skuCode]={};
+      maquilaData[skuCode][dateKey] = val;
+      toSave.push({sku:skuCode, date:dateKey, devices:val, boxes:0});
+    }
+  });
+  boxInputs.forEach(function(inp){
+    var skuCode = inp.getAttribute('data-sku');
+    var dateKey = inp.getAttribute('data-date');
+    var val = parseInt(inp.value)||0;
+    var prev = maquilaBoxData[skuCode]&&maquilaBoxData[skuCode][dateKey]||0;
+    if(val !== prev) {
+      if(!maquilaBoxData[skuCode]) maquilaBoxData[skuCode]={};
+      maquilaBoxData[skuCode][dateKey] = val;
+      // Merge with existing dev save entry or create new
+      var existing = toSave.find(function(x){return x.sku===skuCode&&x.date===dateKey;});
+      if(existing) { existing.boxes = val; }
+      else { toSave.push({sku:skuCode, date:dateKey, devices:0, boxes:val}); }
+    }
+  });
+  // Update KPIs
+  renderReport();
+  // Save to backend
+  toSave.forEach(function(item){
+    var skuObj = SKUS.find(function(s){return s.sku===item.sku;});
+    var skuName = skuObj ? skuObj.name : item.sku;
+    apiPost({action:'append_log', fecha:item.date, sku:item.sku, skuName:skuName, packs:0, devices:item.devices, notas:'maquila-update|boxes:'+item.boxes}, null);
+  });
+  if(toSave.length>0) setSyncStatus('ok','Guardado ✓');
+}
+
+function renderReport(){ renderImpresion(); renderMaquila(); updateKPIs(); }
+
+function renderImpresion() {
+  var tbody = document.getElementById('imp-body');
+  if(!tbody) return;
+  // Impresion data from skuLog (packs field)
+  var bySkuPacks = {};
+  SKUS.forEach(function(s){ bySkuPacks[s.sku]=0; });
+  skuLog.forEach(function(l){ if(l.packs>0 && bySkuPacks[l.sku]!==undefined) bySkuPacks[l.sku]+=l.packs; });
+  var rows = '';
+  SKUS.forEach(function(sku, si){
+    var done = bySkuPacks[sku.sku]||0;
+    var pct = sku.totalPacks>0 ? Math.round(done/sku.totalPacks*100) : 0;
+    var fc = pct>=90?'fill-green':pct>=50?'fill-amber':'fill-red';
+    var pc = pct>=90?'pct-green':pct>=50?'pct-amber':'pct-red';
+    var rbg = si%2===0?'#FFFFFF':'#F5F6F8';
+    rows += '<tr style="background:'+rbg+'">';
+    rows += '<td style="font-size:12px;font-weight:500;padding:8px 12px">'+sku.name+'</td>';
+    rows += '<td style="text-align:right;font-family:DM Mono,monospace;font-size:12px;padding:8px 10px">'+sku.totalPacks.toLocaleString()+'</td>';
+    rows += '<td style="text-align:right;font-family:DM Mono,monospace;font-size:12px;padding:8px 10px">'+done.toLocaleString()+'</td>';
+    rows += '<td style="padding:8px 10px"><div class="progress-wrap"><div class="progress-bar" style="width:100px"><div class="progress-fill '+fc+'" style="width:'+pct+'%"></div></div><span class="'+pc+' pct-text">'+pct+'%</span></div></td>';
+    rows += '</tr>';
+  });
+  // Total row
+  var totalDone = Object.values(bySkuPacks).reduce(function(a,b){return a+b},0);
+  var totalTarget = SKUS.reduce(function(s,x){return s+x.totalPacks},0);
+  var totalPct = totalTarget>0?Math.round(totalDone/totalTarget*100):0;
+  var tfc = totalPct>=90?'fill-green':totalPct>=50?'fill-amber':'fill-red';
+  var tpc = totalPct>=90?'pct-green':totalPct>=50?'pct-amber':'pct-red';
+  rows += '<tr style="background:#E8EAED;font-weight:700">';
+  rows += '<td style="padding:8px 12px;font-size:12px">TOTAL</td>';
+  rows += '<td style="text-align:right;font-family:DM Mono,monospace;font-size:12px;padding:8px 10px">'+totalTarget.toLocaleString()+'</td>';
+  rows += '<td style="text-align:right;font-family:DM Mono,monospace;font-size:12px;padding:8px 10px">'+totalDone.toLocaleString()+'</td>';
+  rows += '<td style="padding:8px 10px"><div class="progress-wrap"><div class="progress-bar" style="width:100px"><div class="progress-fill '+tfc+'" style="width:'+totalPct+'%"></div></div><span class="'+tpc+' pct-text">'+totalPct+'%</span></div></td>';
+  rows += '</tr>';
+  tbody.innerHTML = rows;
+}
+
+function renderMaquila() {
+  initMaquilaFromLog();
+  var thead = document.getElementById('maquila-header');
+  var tbody = document.getElementById('maquila-body');
+  if(!thead||!tbody) return;
+  var canEdit = isEditor();
+
+  // === HEADER ===
+  // Row 1: fixed cols + date groups + totals
+  var h1 = '<tr>';
+  h1 += '<th style="min-width:150px;text-align:left;background:var(--navy);color:#fff;padding:8px 10px" rowspan="2">Descripci&#243;n</th>';
+  h1 += '<th style="min-width:70px;text-align:center;background:var(--navy);color:#fff" rowspan="2">Total<br>Pack</th>';
+  h1 += '<th style="min-width:70px;text-align:center;background:var(--navy);color:#fff" rowspan="2">Total<br>Box</th>';
+  h1 += '<th style="min-width:65px;text-align:center;background:var(--green);color:#fff" rowspan="2">%<br>Packs</th>';
+  h1 += '<th style="min-width:65px;text-align:center;background:var(--green);color:#fff" rowspan="2">%<br>Dev.</th>';
+  MAQUILA_COLS.forEach(function(col){
+    var bg = col.type==='dom'?'background:#777;color:#fff':col.type==='feriado'?'background:#8B1A1A;color:#fff':'background:var(--navy-light);color:#fff';
+    h1 += '<th colspan="2" style="'+bg+';text-align:center;min-width:116px;font-size:11px;padding:6px 3px">'+col.label+'</th>';
+  });
+  h1 += '<th style="background:var(--navy);color:#fff;text-align:center;min-width:70px" rowspan="2">TOTAL<br>Dev.</th><th style="background:#C07A10;color:#fff;text-align:center;min-width:70px" rowspan="2">TOTAL<br>Box</th>';
+  h1 += '</tr>';
+
+  // Row 2: sub-headers for each date col (Dev. + Box)
+  var h2 = '<tr>';
+  // (fixed cols already have rowspan=2, so only date cols)
+  MAQUILA_COLS.forEach(function(col){
+    var bgDev = col.type==='dom'?'background:#999;color:#fff':col.type==='feriado'?'background:#9B2A2A;color:#fff':'background:#2C3E63;color:#fff';
+    var bgBox = col.type==='dom'?'background:#888;color:#fff':col.type==='feriado'?'background:#7B1A1A;color:#fff':'background:#1B3555;color:#E8B84B';
+    h2 += '<th style="'+bgDev+';text-align:center;font-size:9px;padding:3px;min-width:52px">Dev.</th>';
+    h2 += '<th style="'+bgBox+';text-align:center;font-size:9px;padding:3px;min-width:52px">Box</th>';
+  });
+  h2 += '</tr>';
+  thead.innerHTML = h1 + h2;
+
+  // === BODY ===
+  var colTotals = new Array(MAQUILA_COLS.length).fill(0);
+  var grandDev = 0;
+  var rows = '';
+  SKUS.forEach(function(sku, si){
+    var rowDev = 0;
+    var rowBox = 0;
+    var cells = '';
+    MAQUILA_COLS.forEach(function(col, ci){
+      var valDev = (maquilaData[sku.sku]&&maquilaData[sku.sku][col.key])||0;
+      var valBox = (maquilaBoxData[sku.sku]&&maquilaBoxData[sku.sku][col.key])||0;
+      var bgDev = col.type==='dom'?'background:#D8D8D8;':col.type==='feriado'?'background:#D4000020;':'';
+      var bgBox = col.type==='dom'?'background:#C8C8C8;':col.type==='feriado'?'background:#D4000030;':'background:#FFFDF5;';
+      var isLocked = col.type==='dom'||col.type==='feriado';
+      if(canEdit && !isLocked) {
+        cells += '<td style="'+bgDev+'text-align:center;padding:2px 1px"><input type="number" min="0" data-sku="'+sku.sku+'" data-date="'+col.key+'" data-field="dev" value="'+(valDev||'')+'" placeholder="" style="width:52px;border:1px solid #ddd;border-radius:3px;font-size:11px;font-family:DM Mono,monospace;text-align:center;padding:3px 2px;color:#1A1E27" oninput="onMaquilaInput(this,\''+sku.sku+'\',\''+col.key+'\',\'dev\')"></td>';
+        cells += '<td style="'+bgBox+'text-align:center;padding:2px 1px"><input type="number" min="0" data-sku="'+sku.sku+'" data-date="'+col.key+'" data-field="box" value="'+(valBox||'')+'" placeholder="" style="width:52px;border:1px solid #E8B84B;border-radius:3px;font-size:11px;font-family:DM Mono,monospace;text-align:center;padding:3px 2px;color:#7A4A00" oninput="onMaquilaInput(this,\''+sku.sku+'\',\''+col.key+'\',\'box\')"></td>';
+      } else {
+        cells += '<td style="'+bgDev+'text-align:center;font-size:11px;font-family:DM Mono,monospace;color:#1A1E27">'+(valDev>0?valDev.toLocaleString():'')+  '</td>';
+        cells += '<td style="'+bgBox+'text-align:center;font-size:11px;font-family:DM Mono,monospace;color:#C07A10">'+(valBox>0?valBox.toLocaleString():'')+  '</td>';
+      }
+      rowDev += valDev;
+      rowBox += valBox;
+      colTotals[ci] += valDev;
+    });
+        grandDev += rowDev;
+    var dPct = sku.totalDevices>0 ? Math.round(rowDev/sku.totalDevices*100) : 0;
+    var pPct = sku.totalPacks>0 ? Math.round(rowDev/10/sku.totalPacks*100) : 0; // approx packs
+    var dClr = dPct>=90?'var(--green)':dPct>=50?'var(--amber)':'var(--red)';
+    var pClr = pPct>=90?'var(--green)':pPct>=50?'var(--amber)':'var(--red)';
+    var rbg = si%2===0?'#FFFFFF':'#F5F6F8';
+    rows += '<tr style="background:'+rbg+'">';
+    rows += '<td style="font-size:12px;font-weight:500;padding:6px 10px">'+sku.name+'</td>';
+    rows += '<td style="text-align:center;font-size:11px;font-family:DM Mono,monospace">'+sku.totalPacks+'</td>';
+    rows += '<td style="text-align:center;font-size:11px;font-family:DM Mono,monospace">'+sku.totalDevices.toLocaleString()+'</td>';
+    rows += '<td style="text-align:center;font-size:11px;font-weight:700;color:'+pClr+'">'+pPct+'%</td>';
+    rows += '<td style="text-align:center;font-size:11px;font-weight:700;color:'+dClr+'">'+dPct+'%</td>';
+    rows += cells;
+    rows += '<td style="text-align:center;font-size:11px;font-family:DM Mono,monospace;font-weight:600;background:#E8F0FB;color:var(--navy)">'+(rowDev>0?rowDev.toLocaleString():'')+  '</td>';
+    rows += '<td style="text-align:center;font-size:11px;font-family:DM Mono,monospace;font-weight:600;background:#FFFDF0;color:#C07A10">'+(rowBox>0?rowBox.toLocaleString():'')+  '</td>';
+    rows += '</tr>';
+  });
+
+  // Total row
+  var totRow = '<tr style="background:#E8EAED;font-weight:700">';
+  totRow += '<td style="padding:6px 10px;font-size:12px">TOTAL</td>';
+  totRow += '<td style="text-align:center;font-size:11px;font-family:DM Mono,monospace">'+SKUS.reduce(function(s,x){return s+x.totalPacks},0)+'</td>';
+  totRow += '<td style="text-align:center;font-size:11px;font-family:DM Mono,monospace">'+TOTAL_DEVICES.toLocaleString()+'</td>';
+  var gPPct = Math.round(grandDev/10/SKUS.reduce(function(s,x){return s+x.totalPacks},0)*100);
+  var gDPct = Math.round(grandDev/TOTAL_DEVICES*100);
+  var gpClr = gPPct>=90?'var(--green)':gPPct>=50?'var(--amber)':'var(--red)';
+  var gdClr = gDPct>=90?'var(--green)':gDPct>=50?'var(--amber)':'var(--red)';
+  totRow += '<td style="text-align:center;background:var(--green);color:#fff;font-size:11px">'+gPPct+'%</td>';
+  totRow += '<td style="text-align:center;background:var(--green);color:#fff;font-size:11px">'+gDPct+'%</td>';
+  colTotals.forEach(function(v, ci){
+    var col = MAQUILA_COLS[ci];
+    var bg = col.type==='dom'?'#C8C8C8':col.type==='feriado'?'#8B1A1A':'#E8EAED';
+    var fc = col.type==='feriado'?'#fff':'#1A1E27';
+    var bgBox = col.type==='dom'?'#B8B8B8':col.type==='feriado'?'#6B1A1A':'#F5F0E0';
+    var fcBox = col.type==='feriado'?'#fff':'#C07A10';
+    totRow += '<td style="background:'+bg+';color:'+fc+';text-align:center;font-size:11px;font-family:DM Mono,monospace">'+(v>0?v.toLocaleString():'')+  '</td>';
+    totRow += '<td style="background:'+bgBox+';color:'+fcBox+';text-align:center;font-size:11px;font-family:DM Mono,monospace">-</td>';
+  });
+  totRow += '<td style="background:var(--navy);color:#fff;text-align:center;font-size:11px;font-family:DM Mono,monospace;font-weight:700">'+(grandDev>0?grandDev.toLocaleString():'')+  '</td>';
+  totRow += '<td style="background:#C07A10;color:#fff;text-align:center;font-size:11px;font-family:DM Mono,monospace;font-weight:700">-</td>';
+  totRow += '</tr>';
+  tbody.innerHTML = rows + totRow;
+}
+
+function onMaquilaInput(inp, skuCode, dateKey, field) {
+  // Live update total column for this row (last two tds: dev total, box total)
+  var row = inp.closest('tr');
+  if(!row) return;
+  var devInputs = row.querySelectorAll('input[data-field="dev"]');
+  var boxInputs = row.querySelectorAll('input[data-field="box"]');
+  var rowDevTotal = 0;
+  var rowBoxTotal = 0;
+  devInputs.forEach(function(i){ rowDevTotal += parseInt(i.value)||0; });
+  boxInputs.forEach(function(i){ rowBoxTotal += parseInt(i.value)||0; });
+  var allTds = row.querySelectorAll('td');
+  // Second to last = dev total, last = box total
+  if(allTds.length >= 2) {
+    allTds[allTds.length-2].textContent = rowDevTotal>0?rowDevTotal.toLocaleString():'';
+    allTds[allTds.length-1].textContent = rowBoxTotal>0?rowBoxTotal.toLocaleString():'';
+  }
+  // Update data stores live
+  if(field==='box') {
+    if(!maquilaBoxData[skuCode]) maquilaBoxData[skuCode]={};
+    maquilaBoxData[skuCode][dateKey] = parseInt(inp.value)||0;
+  } else {
+    if(!maquilaData[skuCode]) maquilaData[skuCode]={};
+    maquilaData[skuCode][dateKey] = parseInt(inp.value)||0;
+  }
+  updateKPIs();
+}
 function updateKPIs() {
-  var tDev=SKUS.reduce(function(s,x){return s+x.devicesRepack},0);
-  var tPacks=SKUS.reduce(function(s,x){return s+x.packsImpresion},0);
-  var sDone=SKUS.filter(function(s){return s.packsImpresion>=s.total}).length;
-  var rPct=Math.round(tDev/TOTAL_DEVICES*100);
+  // Impresion packs from skuLog
+  var tPacks=skuLog.reduce(function(s,l){return s+l.packs},0);
+  var totalTargetPacks=SKUS.reduce(function(s,x){return s+x.totalPacks},0);
+  // Devices from maquilaData
+  var tDev=0;
+  SKUS.forEach(function(s){
+    if(maquilaData[s.sku]) Object.values(maquilaData[s.sku]).forEach(function(v){tDev+=v;});
+  });
+  var sDone=SKUS.filter(function(s){
+    var sp=skuLog.filter(function(l){return l.sku===s.sku}).reduce(function(t,l){return t+l.packs},0);
+    return sp>=s.totalPacks;
+  }).length;
+  var rPct=TOTAL_DEVICES>0?Math.round(tDev/TOTAL_DEVICES*100):0;
   var today=new Date().toISOString().split('T')[0];
   var tl=skuLog.filter(function(l){return l.fecha===today});
   document.getElementById('kpi-devices').textContent=tDev.toLocaleString();
   document.getElementById('kpi-devices-sub').textContent='de '+TOTAL_DEVICES.toLocaleString()+' total';
-  document.getElementById('kpi-devices-bar').style.width=Math.min(100,Math.round(tDev/TOTAL_DEVICES*100))+'%';
+  document.getElementById('kpi-devices-bar').style.width=Math.min(100,rPct)+'%';
   document.getElementById('kpi-skus').textContent=sDone+' / 4';
-  document.getElementById('kpi-skus-sub').textContent=Math.round(tPacks/SKUS.reduce(function(s,x){return s+x.total},0)*100)+'% de packs impresos';
+  document.getElementById('kpi-skus-sub').textContent=(totalTargetPacks>0?Math.round(tPacks/totalTargetPacks*100):0)+'% de packs impresos';
   document.getElementById('kpi-skus-bar').style.width=(sDone/4*100)+'%';
   document.getElementById('kpi-repack').textContent=rPct+'%';
   document.getElementById('kpi-repack-bar').style.width=rPct+'%';
   document.getElementById('kpi-obs').textContent=observations.length;
   document.getElementById('kpi-obs-bar').style.width=Math.min(100,observations.length*5)+'%';
   document.getElementById('prod-packs').textContent=tl.reduce(function(s,l){return s+l.packs},0).toLocaleString();
-  document.getElementById('prod-devices').textContent=tl.reduce(function(s,l){return s+l.devices},0).toLocaleString();
+  var todayDev=0;
+  SKUS.forEach(function(s){if(maquilaData[s.sku]&&maquilaData[s.sku][today])todayDev+=maquilaData[s.sku][today];});
+  document.getElementById('prod-devices').textContent=todayDev.toLocaleString();
   document.getElementById('prod-obs').textContent=observations.filter(function(o){return o.fecha===today}).length;
 }
 function renderObservations() {
   var tb=document.getElementById('obs-body');
+  var empty=document.getElementById('obs-empty');
+  if(!tb) return;
   tb.innerHTML='';
   var tm={Material:'tipo-material',Merma:'tipo-merma',Proceso:'tipo-proceso',Pendiente:'tipo-pendiente'};
   observations.slice().reverse().forEach(function(o){
     tb.innerHTML+='<tr><td style="font-size:12px;color:var(--gray-600)">'+o.fecha+'</td><td style="font-family:DM Mono,monospace;font-size:11px">'+o.sku+'</td><td style="font-size:12px">'+o.desc+'</td><td><span class="tipo-badge '+(tm[o.tipo]||'tipo-material')+'">'+o.tipo+'</span></td><td class="obs-cant">x'+o.cant+'</td></tr>';
   });
-  document.getElementById('obs-count-badge').textContent=observations.length+' registros';
+  if(empty) empty.style.display = observations.length===0?'block':'none';
+  var badge = document.getElementById('obs-count-badge');
+  if(badge) badge.textContent=observations.length+' registros';
 }
 
 // ===== EXCEL EXPORT =====
 function exportToExcel() {
   var wb=XLSX.utils.book_new();
-  var tDev=SKUS.reduce(function(s,x){return s+x.devicesRepack},0);
+  var tDev=skuLog.reduce(function(s,l){return s+l.devices},0);
+  var tPacks=skuLog.reduce(function(s,l){return s+l.packs},0);
   var rPct=Math.round(tDev/TOTAL_DEVICES*100);
-  var wsKPI=XLSX.utils.aoa_to_sheet([['REPORTE DE AVANCE - SERVICIO REPACK VUSE'],['Generado:',new Date().toLocaleString('es-PE')],[],['KPI','Valor','Total','% Avance'],['Devices Completados',tDev,TOTAL_DEVICES,rPct+'%'],['SKUs Imp. Completa',SKUS.filter(function(s){return s.packsImpresion>=s.total}).length,4,''],['Maquila/Repack %',rPct+'%','',''],['Observaciones',observations.length,'','']]);
+  var wsKPI=XLSX.utils.aoa_to_sheet([['REPORTE DE AVANCE - SERVICIO REPACK VUSE'],['Generado:',new Date().toLocaleString('es-PE')],[],['KPI','Valor','Total','% Avance'],['Devices Reempacados',tDev,TOTAL_DEVICES,rPct+'%'],['Packs Impresos',tPacks,SKUS.reduce(function(s,x){return s+x.totalPacks},0),''],['Maquila/Repack %',rPct+'%','',''],['Observaciones',observations.length,'','']]);
   XLSX.utils.book_append_sheet(wb,wsKPI,'Resumen KPIs');
   var bc={'VUSE 3K Blueberry Ice':'Q51565195L','VUSE 3K Grape Ice':'Q51264646L','VUSE GO 1K Strawberry Ice':'Q52065700L','VUSE 3K Green Apple':'Q51254645L'};
   var tc={'VUSE 3K Blueberry Ice':'RQPE5F05DDTL','VUSE 3K Grape Ice':'RQPE5E06DDTL','VUSE GO 1K Strawberry Ice':'RQPE5G25DDOL','VUSE 3K Green Apple':'RQPE5E05DDTL'};
-  var wsSKU=XLSX.utils.aoa_to_sheet([['SKU','Descripcion','Total','Packs Imp.','% Imp.','Dev. Repack','% Repack','Batch Code','Trazabilidad','Prioridad']].concat(SKUS.map(function(s){return[s.sku,s.name,s.total,s.packsImpresion,Math.round(s.packsImpresion/s.total*100)+'%',s.devicesRepack,Math.round(s.devicesRepack/s.total*100)+'%',bc[s.name]||'',tc[s.name]||'',s.prioridad]})));
-  XLSX.utils.book_append_sheet(wb,wsSKU,'Avance por SKU');
+  var wsSKU=XLSX.utils.aoa_to_sheet([['SKU','Descripcion','Total Packs','Total Devices','Batch Code','Trazabilidad','Prioridad']].concat(SKUS.map(function(s){return[s.sku,s.name,s.totalPacks,s.totalDevices,bc[s.name]||'',tc[s.name]||'',s.prioridad]})));
+  XLSX.utils.book_append_sheet(wb,wsSKU,'SKUs Referencia');
   var wsLog=XLSX.utils.aoa_to_sheet([['Fecha','SKU','Descripcion','Packs','Devices','Notas']].concat(skuLog.map(function(l){return[l.fecha,l.sku,l.skuName,l.packs,l.devices,l.notas]})));
   XLSX.utils.book_append_sheet(wb,wsLog,'Log Produccion');
   var wsObs=XLSX.utils.aoa_to_sheet([['Fecha','SKU','Descripcion','Tipo','Cantidad']].concat(observations.map(function(o){return[o.fecha,o.sku,o.desc,o.tipo,o.cant]})));
   XLSX.utils.book_append_sheet(wb,wsObs,'Observaciones');
-  var gH=['Actividad','Cant. Packs','Dias','21-Abr','22-Abr','23-Abr','24-Abr','25-Abr','26-Abr(D)','27-Abr','28-Abr','29-Abr','30-Abr','1-May(F)','2-May','3-May(D)','4-May','5-May'];
-  var wsG=XLSX.utils.aoa_to_sheet([gH].concat(GANTT_ROWS.map(function(r){return[r.label,r.packs,countActiveDays(r.days)].concat(r.days.map(function(d){return d===1?'X':''}))})));
+  var gH=['Actividad','Cant. Packs','Dias Activos','21-Abr','22-Abr','23-Abr','24-Abr','25-Abr','26-Abr(D)','27-Abr','28-Abr','29-Abr','30-Abr','1-May(F)','2-May','3-May(D)','4-May','Total'];
+  var wsG=XLSX.utils.aoa_to_sheet([gH].concat(GANTT_ROWS.map(function(r){return[r.label,r.packs,countActiveDays(r.days)].concat(r.days).concat([sumDays(r.days)])})));
   XLSX.utils.book_append_sheet(wb,wsG,'Gantt Ejecucion');
   XLSX.writeFile(wb,'TT_Audit_Repack_VUSE_'+new Date().toISOString().split('T')[0]+'.xlsx');
 }

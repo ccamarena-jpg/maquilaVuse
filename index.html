@@ -801,43 +801,63 @@ function getMaqInputs() {
 
 function saveImpresionData() {
   if(!isEditor()) return;
+  setSyncStatus('saving','Guardando impresión...');
+  // Read current inputs directly (source of truth)
   var data = getImpInputs();
+  // Update in-memory
+  Object.keys(data).forEach(function(sku){
+    if(!impresionData[sku]) impresionData[sku]={};
+    Object.keys(data[sku]).forEach(function(date){
+      impresionData[sku][date]=data[sku][date];
+    });
+  });
+  // Save ALL rows that have any value to sheet
   var saved=0;
   Object.keys(data).forEach(function(sku){
     Object.keys(data[sku]).forEach(function(date){
       var v=data[sku][date];
-      var prev=impresionData[sku]&&impresionData[sku][date]||{box:0,device:0,merma:0};
-      if(v.box!==prev.box||v.device!==prev.device||v.merma!==prev.merma){
-        if(!impresionData[sku]) impresionData[sku]={};
-        impresionData[sku][date]=v;
-        var skuObj=SKUS.find(function(s){return s.sku===sku;});
-        apiPost({action:'save_impresion',fecha:date,sku:sku,skuName:skuObj?skuObj.name:sku,imp_box:v.box,imp_device:v.device,merma:v.merma},null);
-        saved++;
-      }
+      // Save row even if all zeros, so sheet stays in sync
+      var skuObj=SKUS.find(function(s){return s.sku===sku;});
+      apiPost({action:'save_impresion',fecha:date,sku:sku,skuName:skuObj?skuObj.name:sku,imp_box:v.box||0,imp_device:v.device||0,merma:v.merma||0},null);
+      saved++;
     });
   });
   renderReport();
-  if(saved>0) setSyncStatus('ok','Impresi\u00f3n guardada \u2713');
+  if(saved>0){
+    setSyncStatus('ok','Impresión guardada ✓ ('+saved+' registros)');
+  } else {
+    setSyncStatus('ok','Sin datos para guardar');
+  }
 }
 
 function saveMaquilaData() {
   if(!isEditor()) return;
+  setSyncStatus('saving','Guardando maquila...');
   var data = getMaqInputs();
+  // Update in-memory
+  Object.keys(data).forEach(function(sku){
+    if(!maquilaData[sku]) maquilaData[sku]={};
+    Object.keys(data[sku]).forEach(function(date){
+      maquilaData[sku][date]=data[sku][date];
+    });
+  });
+  // Save ALL rows
   var saved=0;
   Object.keys(data).forEach(function(sku){
     Object.keys(data[sku]).forEach(function(date){
       var v=data[sku][date];
-      var prev=maquilaData[sku]&&maquilaData[sku][date]||{box:0,device:0};
-      if(v.box!==prev.box||v.device!==prev.device){
-        if(!maquilaData[sku]) maquilaData[sku]={};
-        maquilaData[sku][date]=v;
-        var skuObj=SKUS.find(function(s){return s.sku===sku;});
-        apiPost({action:'save_maquila',fecha:date,sku:sku,skuName:skuObj?skuObj.name:sku,maq_box:v.box,maq_device:v.device},null);
-        saved++;
-      }
+      var skuObj=SKUS.find(function(s){return s.sku===sku;});
+      apiPost({action:'save_maquila',fecha:date,sku:sku,skuName:skuObj?skuObj.name:sku,maq_box:v.box||0,maq_device:v.device||0},null);
+      saved++;
     });
   });
   renderReport();
+  if(saved>0){
+    setSyncStatus('ok','Maquila guardada ✓ ('+saved+' registros)');
+  } else {
+    setSyncStatus('ok','Sin datos para guardar');
+  }
+}
   if(saved>0) setSyncStatus('ok','Maquila guardada \u2713');
 }
 

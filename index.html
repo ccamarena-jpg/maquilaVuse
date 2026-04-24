@@ -217,26 +217,22 @@ body{font-family:'DM Sans',sans-serif;background:var(--gray-100);color:var(--gra
     <div class="prod-cell"><div class="prod-value" id="prod-obs">0</div><div class="prod-label">Observaciones Nuevas</div></div>
   </div>
   <!-- IMPRESION SECTION -->
-  <div class="section-label">&#128222; Impresi&#243;n de Packs <button class="btn-add-task editor-only" style="margin-left:12px;font-size:11px;padding:5px 12px" onclick="openSkuModal()">+ Registrar Avance</button></div>
+  <div class="section-label">&#128222; Impresi&#243;n de Packs
+    <button class="btn-add-task editor-only" onclick="saveImpresionData()">&#128190; Guardar Impresi&#243;n</button>
+  </div>
   <div class="panel" style="margin-bottom:24px">
-    <div class="panel-header">
-      <span class="panel-title">Avance Impresi&#243;n por SKU</span>
+    <div style="overflow-x:auto">
+      <table class="sku-table" id="imp-table" style="min-width:900px;border-collapse:collapse">
+        <thead id="imp-header"></thead>
+        <tbody id="imp-body"></tbody>
+      </table>
     </div>
-    <table class="sku-table">
-      <thead>
-        <tr>
-          <th style="text-align:left">Descripci&#243;n</th>
-          <th style="text-align:right">Total Packs</th>
-          <th style="text-align:right">Impresos</th>
-          <th style="text-align:right;min-width:120px">Avance</th>
-        </tr>
-      </thead>
-      <tbody id="imp-body"></tbody>
-    </table>
   </div>
 
   <!-- MAQUILA SECTION -->
-  <div class="section-label">&#128230; Maquila / Repack <button class="btn-add-task editor-only" style="margin-left:12px;font-size:11px;padding:5px 12px" onclick="saveMaquilaData()">&#128190; Guardar Maquila</button></div>
+  <div class="section-label">&#128230; Maquila / Repack
+    <button class="btn-add-task editor-only" onclick="saveMaquilaData()">&#128190; Guardar Maquila</button>
+  </div>
   <div class="panel" style="margin-bottom:24px">
     <div style="overflow-x:auto">
       <table class="sku-table" id="maquila-table" style="min-width:900px;border-collapse:collapse">
@@ -359,10 +355,10 @@ var GANTT_ROWS=[
 ];
 
 var SKUS=[
-  {name:'VUSE GO 1K Strawberry Ice',sku:'10208401',totalDevices:3580,totalPacks:358, prioridad:1,packsImpresion:0,devicesRepack:0},
-  {name:'VUSE 3K Grape Ice',        sku:'10225295',totalDevices:2060,totalPacks:206, prioridad:1,packsImpresion:0,devicesRepack:0},
-  {name:'VUSE 3K Green Apple',      sku:'10225303',totalDevices:5070,totalPacks:507, prioridad:2,packsImpresion:0,devicesRepack:0},
-  {name:'VUSE 3K Blueberry Ice',   sku:'10227738',totalDevices:1670,totalPacks:167, prioridad:2,packsImpresion:0,devicesRepack:0}
+  {name:'VUSE GO 1K Strawberry Ice',sku:'10208401',totalBox:358, totalDevice:3580,prioridad:2},
+  {name:'VUSE 3K Grape Ice',         sku:'10225295',totalBox:206, totalDevice:2060,prioridad:1},
+  {name:'VUSE 3K Green Apple',       sku:'10225303',totalBox:507, totalDevice:5070,prioridad:3},
+  {name:'VUSE 3K Blueberry Ice',     sku:'10227738',totalBox:167, totalDevice:1670,prioridad:1}
 ];
 var TOTAL_DEVICES=12380;
 var observations=[], skuLog=[];
@@ -436,20 +432,31 @@ function loadFromSheet() {
         if(!sheetRow) continue;
         GANTT_ROWS[ri].label = sheetRow[0] || GANTT_ROWS[ri].label;
         for(var c=0; c<15; c++) {
-          GANTT_ROWS[ri].days[c] = parseInt(sheetRow[c+1]) || 0;
+          GANTT_ROWS[ri].days[c] = parseInt(sheetRow[c+2]) || 0; // col 0=act,1=packs, dates start col 2
         }
       }
     }
 
-    // Load log_produccion (skip header)
+    // Load impresion_log
+    if(data.imp && data.imp.length > 1) {
+      initImpresionFromSheet(data.imp);
+    }
+
+    // Load maquila_log
+    if(data.maq && data.maq.length > 1) {
+      initMaquilaFromSheet(data.maq);
+    }
+
+    // Legacy: also load old log_produccion if present
     if(data.log && data.log.length > 1) {
       skuLog = [];
       for(var i=1; i<data.log.length; i++) {
         var r = data.log[i];
         if(!r[0]) continue;
-        var fecha = typeof r[0]==='object' ? r[0].toISOString().split('T')[0] : String(r[0]);
+        var fecha = r[0] instanceof Date ? r[0].toISOString().split('T')[0] : String(r[0]);
         skuLog.push({fecha:fecha, sku:String(r[1]), skuName:String(r[2]), packs:parseInt(r[3])||0, devices:parseInt(r[4])||0, notas:String(r[5]||'')});
       }
+      initFromLegacyLog();
     }
 
     // Load observaciones (skip header)
@@ -458,7 +465,7 @@ function loadFromSheet() {
       for(var i=1; i<data.obs.length; i++) {
         var r = data.obs[i];
         if(!r[0]) continue;
-        var fecha = typeof r[0]==='object' ? r[0].toISOString().split('T')[0] : String(r[0]);
+        var fecha = r[0] instanceof Date ? r[0].toISOString().split('T')[0] : String(r[0]);
         observations.push({fecha:fecha, sku:String(r[1]), desc:String(r[2]), tipo:String(r[3]), cant:parseInt(r[4])||1});
       }
     }
@@ -680,284 +687,498 @@ function saveObservation() {
   renderObservations(); updateKPIs();
 }
 
-// ===== MAQUILA DATA (editable in-table) =====
-// maquilaData[skuCode][dateKey] = devices number
-var maquilaData = {}; // devices per sku per date
-var maquilaBoxData = {}; // boxes per sku per date
+// =====================================================
+// DATA STRUCTURES
+// impresionData[skuCode][dateKey] = {box, device, merma}
+// maquilaData[skuCode][dateKey]   = {box, device}
+// =====================================================
+var impresionData = {};
+var maquilaData   = {};
 
-// Maquila columns start from 24-Apr
-var MAQUILA_COLS=[
-  {key:'2026-04-24',label:'VIE<br>24-Abr',type:'work'},
-  {key:'2026-04-25',label:'SÁB<br>25-Abr',type:'work'},
-  {key:'2026-04-26',label:'DOM<br>26-Abr',type:'dom'},
-  {key:'2026-04-27',label:'LUN<br>27-Abr',type:'work'},
-  {key:'2026-04-28',label:'MAR<br>28-Abr',type:'work'},
-  {key:'2026-04-29',label:'MIÉ<br>29-Abr',type:'work'},
-  {key:'2026-04-30',label:'JUE<br>30-Abr',type:'work'},
-  {key:'2026-05-01',label:'VIE<br>1-May',type:'feriado'},
-  {key:'2026-05-02',label:'SÁB<br>2-May',type:'work'},
-  {key:'2026-05-03',label:'DOM<br>3-May',type:'dom'},
-  {key:'2026-05-04',label:'LUN<br>4-May',type:'work'}
+// Impresion dates: 22-Abr to 4-May (excl DOM 26-Abr, 3-May; excl feriado 1-May)
+var IMP_COLS = [
+  {key:'2026-04-22', label:'22-Abr', type:'work'},
+  {key:'2026-04-23', label:'23-Abr', type:'work'},
+  {key:'2026-04-24', label:'24-Abr', type:'work'},
+  {key:'2026-04-25', label:'25-Abr', type:'work'},
+  {key:'2026-04-26', label:'26-Abr', type:'dom'},
+  {key:'2026-04-27', label:'27-Abr', type:'work'},
+  {key:'2026-04-28', label:'28-Abr', type:'work'},
+  {key:'2026-04-29', label:'29-Abr', type:'work'},
+  {key:'2026-04-30', label:'30-Abr', type:'work'},
+  {key:'2026-05-01', label:'1-May',  type:'feriado'},
+  {key:'2026-05-02', label:'2-May',  type:'work'},
+  {key:'2026-05-03', label:'3-May',  type:'dom'},
+  {key:'2026-05-04', label:'4-May',  type:'work'}
 ];
 
-// Init maquilaData from existing skuLog (devices field)
-function initMaquilaFromLog() {
+// Maquila dates: 24-Abr to 4-May
+var MAQUILA_COLS = [
+  {key:'2026-04-24', label:'VIE<br>24-ABR', type:'work'},
+  {key:'2026-04-25', label:'SÁB<br>25-ABR', type:'work'},
+  {key:'2026-04-26', label:'DOM<br>26-ABR', type:'dom'},
+  {key:'2026-04-27', label:'LUN<br>27-ABR', type:'work'},
+  {key:'2026-04-28', label:'MAR<br>28-ABR', type:'work'},
+  {key:'2026-04-29', label:'MIÉ<br>29-ABR', type:'work'},
+  {key:'2026-04-30', label:'JUE<br>30-ABR', type:'work'},
+  {key:'2026-05-01', label:'VIE<br>1-MAY',  type:'feriado'},
+  {key:'2026-05-02', label:'SÁB<br>2-MAY',  type:'work'},
+  {key:'2026-05-03', label:'DOM<br>3-MAY',  type:'dom'},
+  {key:'2026-05-04', label:'LUN<br>4-MAY',  type:'work'}
+];
+
+// ---- Init from Sheet data ----
+function initImpresionFromSheet(rows) {
+  impresionData = {};
+  SKUS.forEach(function(s){ impresionData[s.sku]={}; });
+  if(!rows || rows.length<2) return;
+  for(var i=1;i<rows.length;i++){
+    var r=rows[i]; if(!r[0]) continue;
+    var fecha = r[0] instanceof Date ? r[0].toISOString().split('T')[0] : String(r[0]).trim();
+    var sku=String(r[1]);
+    if(!impresionData[sku]) impresionData[sku]={};
+    impresionData[sku][fecha]={box:parseInt(r[3])||0, device:parseInt(r[4])||0, merma:parseInt(r[5])||0};
+  }
+}
+
+function initMaquilaFromSheet(rows) {
   maquilaData = {};
-  maquilaBoxData = {};
-  SKUS.forEach(function(s){ maquilaData[s.sku]={}; maquilaBoxData[s.sku]={}; });
+  SKUS.forEach(function(s){ maquilaData[s.sku]={}; });
+  if(!rows || rows.length<2) return;
+  for(var i=1;i<rows.length;i++){
+    var r=rows[i]; if(!r[0]) continue;
+    var fecha = r[0] instanceof Date ? r[0].toISOString().split('T')[0] : String(r[0]).trim();
+    var sku=String(r[1]);
+    if(!maquilaData[sku]) maquilaData[sku]={};
+    maquilaData[sku][fecha]={box:parseInt(r[3])||0, device:parseInt(r[4])||0};
+  }
+}
+
+// Also support legacy skuLog (old format)
+function initFromLegacyLog() {
+  SKUS.forEach(function(s){ impresionData[s.sku]=impresionData[s.sku]||{}; maquilaData[s.sku]=maquilaData[s.sku]||{}; });
   skuLog.forEach(function(l){
-    if(!maquilaData[l.sku]) maquilaData[l.sku]={};
-    if(!maquilaBoxData[l.sku]) maquilaBoxData[l.sku]={};
-    if(l.devices>0) {
-      if(!maquilaData[l.sku][l.fecha]) maquilaData[l.sku][l.fecha]=0;
-      maquilaData[l.sku][l.fecha] += l.devices;
+    if(l.packs>0){
+      if(!impresionData[l.sku]) impresionData[l.sku]={};
+      if(!impresionData[l.sku][l.fecha]) impresionData[l.sku][l.fecha]={box:0,device:0,merma:0};
+      impresionData[l.sku][l.fecha].box += l.packs;
     }
-    if(l.boxes>0) {
-      if(!maquilaBoxData[l.sku][l.fecha]) maquilaBoxData[l.sku][l.fecha]=0;
-      maquilaBoxData[l.sku][l.fecha] += l.boxes;
+    if(l.devices>0 && l.notas!=='maquila-update'){
+      if(!impresionData[l.sku]) impresionData[l.sku]={};
+      if(!impresionData[l.sku][l.fecha]) impresionData[l.sku][l.fecha]={box:0,device:0,merma:0};
+      impresionData[l.sku][l.fecha].device += l.devices;
+    }
+    if(l.devices>0 && l.notas==='maquila-update'){
+      if(!maquilaData[l.sku]) maquilaData[l.sku]={};
+      if(!maquilaData[l.sku][l.fecha]) maquilaData[l.sku][l.fecha]={box:0,device:0};
+      maquilaData[l.sku][l.fecha].device += l.devices;
     }
   });
+}
+
+// ---- Save functions ----
+function getImpInputs() {
+  var result={};
+  document.querySelectorAll('#imp-body input[data-sku][data-date][data-field]').forEach(function(inp){
+    var sku=inp.getAttribute('data-sku'), date=inp.getAttribute('data-date'), field=inp.getAttribute('data-field');
+    if(!result[sku]) result[sku]={};
+    if(!result[sku][date]) result[sku][date]={box:0,device:0,merma:0};
+    result[sku][date][field]=parseInt(inp.value)||0;
+  });
+  return result;
+}
+
+function getMaqInputs() {
+  var result={};
+  document.querySelectorAll('#maquila-body input[data-sku][data-date][data-field]').forEach(function(inp){
+    var sku=inp.getAttribute('data-sku'), date=inp.getAttribute('data-date'), field=inp.getAttribute('data-field');
+    if(!result[sku]) result[sku]={};
+    if(!result[sku][date]) result[sku][date]={box:0,device:0};
+    result[sku][date][field]=parseInt(inp.value)||0;
+  });
+  return result;
+}
+
+function saveImpresionData() {
+  if(!isEditor()) return;
+  var data = getImpInputs();
+  var saved=0;
+  Object.keys(data).forEach(function(sku){
+    Object.keys(data[sku]).forEach(function(date){
+      var v=data[sku][date];
+      var prev=impresionData[sku]&&impresionData[sku][date]||{box:0,device:0,merma:0};
+      if(v.box!==prev.box||v.device!==prev.device||v.merma!==prev.merma){
+        if(!impresionData[sku]) impresionData[sku]={};
+        impresionData[sku][date]=v;
+        var skuObj=SKUS.find(function(s){return s.sku===sku;});
+        apiPost({action:'save_impresion',fecha:date,sku:sku,skuName:skuObj?skuObj.name:sku,imp_box:v.box,imp_device:v.device,merma:v.merma},null);
+        saved++;
+      }
+    });
+  });
+  renderReport();
+  if(saved>0) setSyncStatus('ok','Impresi\u00f3n guardada \u2713');
 }
 
 function saveMaquilaData() {
-  // Read all inputs from the maquila table and sync to maquilaData/maquilaBoxData + skuLog
   if(!isEditor()) return;
-  var devInputs = document.querySelectorAll('#maquila-body input[data-field="dev"]');
-  var boxInputs = document.querySelectorAll('#maquila-body input[data-field="box"]');
-  var toSave = [];
-  devInputs.forEach(function(inp){
-    var skuCode = inp.getAttribute('data-sku');
-    var dateKey = inp.getAttribute('data-date');
-    var val = parseInt(inp.value)||0;
-    var prev = maquilaData[skuCode]&&maquilaData[skuCode][dateKey]||0;
-    if(val !== prev) {
-      if(!maquilaData[skuCode]) maquilaData[skuCode]={};
-      maquilaData[skuCode][dateKey] = val;
-      toSave.push({sku:skuCode, date:dateKey, devices:val, boxes:0});
-    }
+  var data = getMaqInputs();
+  var saved=0;
+  Object.keys(data).forEach(function(sku){
+    Object.keys(data[sku]).forEach(function(date){
+      var v=data[sku][date];
+      var prev=maquilaData[sku]&&maquilaData[sku][date]||{box:0,device:0};
+      if(v.box!==prev.box||v.device!==prev.device){
+        if(!maquilaData[sku]) maquilaData[sku]={};
+        maquilaData[sku][date]=v;
+        var skuObj=SKUS.find(function(s){return s.sku===sku;});
+        apiPost({action:'save_maquila',fecha:date,sku:sku,skuName:skuObj?skuObj.name:sku,maq_box:v.box,maq_device:v.device},null);
+        saved++;
+      }
+    });
   });
-  boxInputs.forEach(function(inp){
-    var skuCode = inp.getAttribute('data-sku');
-    var dateKey = inp.getAttribute('data-date');
-    var val = parseInt(inp.value)||0;
-    var prev = maquilaBoxData[skuCode]&&maquilaBoxData[skuCode][dateKey]||0;
-    if(val !== prev) {
-      if(!maquilaBoxData[skuCode]) maquilaBoxData[skuCode]={};
-      maquilaBoxData[skuCode][dateKey] = val;
-      // Merge with existing dev save entry or create new
-      var existing = toSave.find(function(x){return x.sku===skuCode&&x.date===dateKey;});
-      if(existing) { existing.boxes = val; }
-      else { toSave.push({sku:skuCode, date:dateKey, devices:0, boxes:val}); }
-    }
-  });
-  // Update KPIs
   renderReport();
-  // Save to backend
-  toSave.forEach(function(item){
-    var skuObj = SKUS.find(function(s){return s.sku===item.sku;});
-    var skuName = skuObj ? skuObj.name : item.sku;
-    apiPost({action:'append_log', fecha:item.date, sku:item.sku, skuName:skuName, packs:0, devices:item.devices, notas:'maquila-update|boxes:'+item.boxes}, null);
-  });
-  if(toSave.length>0) setSyncStatus('ok','Guardado ✓');
+  if(saved>0) setSyncStatus('ok','Maquila guardada \u2713');
 }
 
+// ---- Render ----
 function renderReport(){ renderImpresion(); renderMaquila(); updateKPIs(); }
 
-function renderImpresion() {
-  var tbody = document.getElementById('imp-body');
-  if(!tbody) return;
-  // Impresion data from skuLog (packs field)
-  var bySkuPacks = {};
-  SKUS.forEach(function(s){ bySkuPacks[s.sku]=0; });
-  skuLog.forEach(function(l){ if(l.packs>0 && bySkuPacks[l.sku]!==undefined) bySkuPacks[l.sku]+=l.packs; });
-  var rows = '';
-  SKUS.forEach(function(sku, si){
-    var done = bySkuPacks[sku.sku]||0;
-    var pct = sku.totalPacks>0 ? Math.round(done/sku.totalPacks*100) : 0;
-    var fc = pct>=90?'fill-green':pct>=50?'fill-amber':'fill-red';
-    var pc = pct>=90?'pct-green':pct>=50?'pct-amber':'pct-red';
-    var rbg = si%2===0?'#FFFFFF':'#F5F6F8';
-    rows += '<tr style="background:'+rbg+'">';
-    rows += '<td style="font-size:12px;font-weight:500;padding:8px 12px">'+sku.name+'</td>';
-    rows += '<td style="text-align:right;font-family:DM Mono,monospace;font-size:12px;padding:8px 10px">'+sku.totalPacks.toLocaleString()+'</td>';
-    rows += '<td style="text-align:right;font-family:DM Mono,monospace;font-size:12px;padding:8px 10px">'+done.toLocaleString()+'</td>';
-    rows += '<td style="padding:8px 10px"><div class="progress-wrap"><div class="progress-bar" style="width:100px"><div class="progress-fill '+fc+'" style="width:'+pct+'%"></div></div><span class="'+pc+' pct-text">'+pct+'%</span></div></td>';
-    rows += '</tr>';
-  });
-  // Total row
-  var totalDone = Object.values(bySkuPacks).reduce(function(a,b){return a+b},0);
-  var totalTarget = SKUS.reduce(function(s,x){return s+x.totalPacks},0);
-  var totalPct = totalTarget>0?Math.round(totalDone/totalTarget*100):0;
-  var tfc = totalPct>=90?'fill-green':totalPct>=50?'fill-amber':'fill-red';
-  var tpc = totalPct>=90?'pct-green':totalPct>=50?'pct-amber':'pct-red';
-  rows += '<tr style="background:#E8EAED;font-weight:700">';
-  rows += '<td style="padding:8px 12px;font-size:12px">TOTAL</td>';
-  rows += '<td style="text-align:right;font-family:DM Mono,monospace;font-size:12px;padding:8px 10px">'+totalTarget.toLocaleString()+'</td>';
-  rows += '<td style="text-align:right;font-family:DM Mono,monospace;font-size:12px;padding:8px 10px">'+totalDone.toLocaleString()+'</td>';
-  rows += '<td style="padding:8px 10px"><div class="progress-wrap"><div class="progress-bar" style="width:100px"><div class="progress-fill '+tfc+'" style="width:'+totalPct+'%"></div></div><span class="'+tpc+' pct-text">'+totalPct+'%</span></div></td>';
-  rows += '</tr>';
-  tbody.innerHTML = rows;
-}
-
-function renderMaquila() {
-  initMaquilaFromLog();
-  var thead = document.getElementById('maquila-header');
-  var tbody = document.getElementById('maquila-body');
-  if(!thead||!tbody) return;
-  var canEdit = isEditor();
-
-  // === HEADER ===
-  // Row 1: fixed cols + date groups + totals
-  var h1 = '<tr>';
-  h1 += '<th style="min-width:150px;text-align:left;background:var(--navy);color:#fff;padding:8px 10px" rowspan="2">Descripci&#243;n</th>';
-  h1 += '<th style="min-width:70px;text-align:center;background:var(--navy);color:#fff" rowspan="2">Total<br>Pack</th>';
-  h1 += '<th style="min-width:70px;text-align:center;background:var(--navy);color:#fff" rowspan="2">Total<br>Box</th>';
-  h1 += '<th style="min-width:65px;text-align:center;background:var(--green);color:#fff" rowspan="2">%<br>Packs</th>';
-  h1 += '<th style="min-width:65px;text-align:center;background:var(--green);color:#fff" rowspan="2">%<br>Dev.</th>';
-  MAQUILA_COLS.forEach(function(col){
-    var bg = col.type==='dom'?'background:#777;color:#fff':col.type==='feriado'?'background:#8B1A1A;color:#fff':'background:var(--navy-light);color:#fff';
-    h1 += '<th colspan="2" style="'+bg+';text-align:center;min-width:116px;font-size:11px;padding:6px 3px">'+col.label+'</th>';
-  });
-  h1 += '<th style="background:var(--navy);color:#fff;text-align:center;min-width:70px" rowspan="2">TOTAL<br>Dev.</th><th style="background:#C07A10;color:#fff;text-align:center;min-width:70px" rowspan="2">TOTAL<br>Box</th>';
-  h1 += '</tr>';
-
-  // Row 2: sub-headers for each date col (Dev. + Box)
-  var h2 = '<tr>';
-  // (fixed cols already have rowspan=2, so only date cols)
-  MAQUILA_COLS.forEach(function(col){
-    var bgDev = col.type==='dom'?'background:#999;color:#fff':col.type==='feriado'?'background:#9B2A2A;color:#fff':'background:#2C3E63;color:#fff';
-    var bgBox = col.type==='dom'?'background:#888;color:#fff':col.type==='feriado'?'background:#7B1A1A;color:#fff':'background:#1B3555;color:#E8B84B';
-    h2 += '<th style="'+bgDev+';text-align:center;font-size:9px;padding:3px;min-width:52px">Dev.</th>';
-    h2 += '<th style="'+bgBox+';text-align:center;font-size:9px;padding:3px;min-width:52px">Box</th>';
-  });
-  h2 += '</tr>';
-  thead.innerHTML = h1 + h2;
-
-  // === BODY ===
-  var colTotals = new Array(MAQUILA_COLS.length).fill(0);
-  var grandDev = 0;
-  var rows = '';
-  SKUS.forEach(function(sku, si){
-    var rowDev = 0;
-    var rowBox = 0;
-    var cells = '';
-    MAQUILA_COLS.forEach(function(col, ci){
-      var valDev = (maquilaData[sku.sku]&&maquilaData[sku.sku][col.key])||0;
-      var valBox = (maquilaBoxData[sku.sku]&&maquilaBoxData[sku.sku][col.key])||0;
-      var bgDev = col.type==='dom'?'background:#D8D8D8;':col.type==='feriado'?'background:#D4000020;':'';
-      var bgBox = col.type==='dom'?'background:#C8C8C8;':col.type==='feriado'?'background:#D4000030;':'background:#FFFDF5;';
-      var isLocked = col.type==='dom'||col.type==='feriado';
-      if(canEdit && !isLocked) {
-        cells += '<td style="'+bgDev+'text-align:center;padding:2px 1px"><input type="number" min="0" data-sku="'+sku.sku+'" data-date="'+col.key+'" data-field="dev" value="'+(valDev||'')+'" placeholder="" style="width:52px;border:1px solid #ddd;border-radius:3px;font-size:11px;font-family:DM Mono,monospace;text-align:center;padding:3px 2px;color:#1A1E27" oninput="onMaquilaInput(this,\''+sku.sku+'\',\''+col.key+'\',\'dev\')"></td>';
-        cells += '<td style="'+bgBox+'text-align:center;padding:2px 1px"><input type="number" min="0" data-sku="'+sku.sku+'" data-date="'+col.key+'" data-field="box" value="'+(valBox||'')+'" placeholder="" style="width:52px;border:1px solid #E8B84B;border-radius:3px;font-size:11px;font-family:DM Mono,monospace;text-align:center;padding:3px 2px;color:#7A4A00" oninput="onMaquilaInput(this,\''+sku.sku+'\',\''+col.key+'\',\'box\')"></td>';
-      } else {
-        cells += '<td style="'+bgDev+'text-align:center;font-size:11px;font-family:DM Mono,monospace;color:#1A1E27">'+(valDev>0?valDev.toLocaleString():'')+  '</td>';
-        cells += '<td style="'+bgBox+'text-align:center;font-size:11px;font-family:DM Mono,monospace;color:#C07A10">'+(valBox>0?valBox.toLocaleString():'')+  '</td>';
-      }
-      rowDev += valDev;
-      rowBox += valBox;
-      colTotals[ci] += valDev;
-    });
-        grandDev += rowDev;
-    var dPct = sku.totalDevices>0 ? Math.round(rowDev/sku.totalDevices*100) : 0;
-    var pPct = sku.totalPacks>0 ? Math.round(rowDev/10/sku.totalPacks*100) : 0; // approx packs
-    var dClr = dPct>=90?'var(--green)':dPct>=50?'var(--amber)':'var(--red)';
-    var pClr = pPct>=90?'var(--green)':pPct>=50?'var(--amber)':'var(--red)';
-    var rbg = si%2===0?'#FFFFFF':'#F5F6F8';
-    rows += '<tr style="background:'+rbg+'">';
-    rows += '<td style="font-size:12px;font-weight:500;padding:6px 10px">'+sku.name+'</td>';
-    rows += '<td style="text-align:center;font-size:11px;font-family:DM Mono,monospace">'+sku.totalPacks+'</td>';
-    rows += '<td style="text-align:center;font-size:11px;font-family:DM Mono,monospace">'+sku.totalDevices.toLocaleString()+'</td>';
-    rows += '<td style="text-align:center;font-size:11px;font-weight:700;color:'+pClr+'">'+pPct+'%</td>';
-    rows += '<td style="text-align:center;font-size:11px;font-weight:700;color:'+dClr+'">'+dPct+'%</td>';
-    rows += cells;
-    rows += '<td style="text-align:center;font-size:11px;font-family:DM Mono,monospace;font-weight:600;background:#E8F0FB;color:var(--navy)">'+(rowDev>0?rowDev.toLocaleString():'')+  '</td>';
-    rows += '<td style="text-align:center;font-size:11px;font-family:DM Mono,monospace;font-weight:600;background:#FFFDF0;color:#C07A10">'+(rowBox>0?rowBox.toLocaleString():'')+  '</td>';
-    rows += '</tr>';
-  });
-
-  // Total row
-  var totRow = '<tr style="background:#E8EAED;font-weight:700">';
-  totRow += '<td style="padding:6px 10px;font-size:12px">TOTAL</td>';
-  totRow += '<td style="text-align:center;font-size:11px;font-family:DM Mono,monospace">'+SKUS.reduce(function(s,x){return s+x.totalPacks},0)+'</td>';
-  totRow += '<td style="text-align:center;font-size:11px;font-family:DM Mono,monospace">'+TOTAL_DEVICES.toLocaleString()+'</td>';
-  var gPPct = Math.round(grandDev/10/SKUS.reduce(function(s,x){return s+x.totalPacks},0)*100);
-  var gDPct = Math.round(grandDev/TOTAL_DEVICES*100);
-  var gpClr = gPPct>=90?'var(--green)':gPPct>=50?'var(--amber)':'var(--red)';
-  var gdClr = gDPct>=90?'var(--green)':gDPct>=50?'var(--amber)':'var(--red)';
-  totRow += '<td style="text-align:center;background:var(--green);color:#fff;font-size:11px">'+gPPct+'%</td>';
-  totRow += '<td style="text-align:center;background:var(--green);color:#fff;font-size:11px">'+gDPct+'%</td>';
-  colTotals.forEach(function(v, ci){
-    var col = MAQUILA_COLS[ci];
-    var bg = col.type==='dom'?'#C8C8C8':col.type==='feriado'?'#8B1A1A':'#E8EAED';
-    var fc = col.type==='feriado'?'#fff':'#1A1E27';
-    var bgBox = col.type==='dom'?'#B8B8B8':col.type==='feriado'?'#6B1A1A':'#F5F0E0';
-    var fcBox = col.type==='feriado'?'#fff':'#C07A10';
-    totRow += '<td style="background:'+bg+';color:'+fc+';text-align:center;font-size:11px;font-family:DM Mono,monospace">'+(v>0?v.toLocaleString():'')+  '</td>';
-    totRow += '<td style="background:'+bgBox+';color:'+fcBox+';text-align:center;font-size:11px;font-family:DM Mono,monospace">-</td>';
-  });
-  totRow += '<td style="background:var(--navy);color:#fff;text-align:center;font-size:11px;font-family:DM Mono,monospace;font-weight:700">'+(grandDev>0?grandDev.toLocaleString():'')+  '</td>';
-  totRow += '<td style="background:#C07A10;color:#fff;text-align:center;font-size:11px;font-family:DM Mono,monospace;font-weight:700">-</td>';
-  totRow += '</tr>';
-  tbody.innerHTML = rows + totRow;
-}
-
-function onMaquilaInput(inp, skuCode, dateKey, field) {
-  // Live update total column for this row (last two tds: dev total, box total)
-  var row = inp.closest('tr');
-  if(!row) return;
-  var devInputs = row.querySelectorAll('input[data-field="dev"]');
-  var boxInputs = row.querySelectorAll('input[data-field="box"]');
-  var rowDevTotal = 0;
-  var rowBoxTotal = 0;
-  devInputs.forEach(function(i){ rowDevTotal += parseInt(i.value)||0; });
-  boxInputs.forEach(function(i){ rowBoxTotal += parseInt(i.value)||0; });
-  var allTds = row.querySelectorAll('td');
-  // Second to last = dev total, last = box total
-  if(allTds.length >= 2) {
-    allTds[allTds.length-2].textContent = rowDevTotal>0?rowDevTotal.toLocaleString():'';
-    allTds[allTds.length-1].textContent = rowBoxTotal>0?rowBoxTotal.toLocaleString():'';
+function mkInput(sku, date, field, val, canEdit, isLocked, bg) {
+  if(canEdit && !isLocked) {
+    return '<td style="'+bg+'text-align:center;padding:2px 1px;border:1px solid #e0e0e0">'
+      +'<input type="number" min="0" data-sku="'+sku+'" data-date="'+date+'" data-field="'+field+'" value="'+(val||'')+'" '
+      +'placeholder="" style="width:55px;border:1px solid var(--gold);border-radius:3px;font-size:11px;font-family:DM Mono,monospace;text-align:center;padding:3px 1px;background:#fffdf5" '
+      +'oninput="onTableInput(this,\'imp\')"></td>';
   }
-  // Update data stores live
-  if(field==='box') {
-    if(!maquilaBoxData[skuCode]) maquilaBoxData[skuCode]={};
-    maquilaBoxData[skuCode][dateKey] = parseInt(inp.value)||0;
+  return '<td style="'+bg+'text-align:center;font-size:11px;font-family:DM Mono,monospace;border:1px solid #e0e0e0">'+(val>0?val.toLocaleString():'')+'</td>';
+}
+
+function mkMaqInput(sku, date, field, val, canEdit, isLocked, bg) {
+  if(canEdit && !isLocked) {
+    return '<td style="'+bg+'text-align:center;padding:2px 1px;border:1px solid #e0e0e0">'
+      +'<input type="number" min="0" data-sku="'+sku+'" data-date="'+date+'" data-field="'+field+'" value="'+(val||'')+'" '
+      +'placeholder="" style="width:55px;border:1px solid var(--gold);border-radius:3px;font-size:11px;font-family:DM Mono,monospace;text-align:center;padding:3px 1px;background:#fffdf5" '
+      +'oninput="onTableInput(this,\'maq\')"></td>';
+  }
+  return '<td style="'+bg+'text-align:center;font-size:11px;font-family:DM Mono,monospace;border:1px solid #e0e0e0">'+(val>0?val.toLocaleString():'')+'</td>';
+}
+
+function onTableInput(inp, tableType) {
+  var sku=inp.getAttribute('data-sku'), date=inp.getAttribute('data-date'), field=inp.getAttribute('data-field');
+  var val=parseInt(inp.value)||0;
+  // Update in-memory
+  if(tableType==='imp'){
+    if(!impresionData[sku]) impresionData[sku]={};
+    if(!impresionData[sku][date]) impresionData[sku][date]={box:0,device:0,merma:0};
+    impresionData[sku][date][field]=val;
   } else {
-    if(!maquilaData[skuCode]) maquilaData[skuCode]={};
-    maquilaData[skuCode][dateKey] = parseInt(inp.value)||0;
+    if(!maquilaData[sku]) maquilaData[sku]={};
+    if(!maquilaData[sku][date]) maquilaData[sku][date]={box:0,device:0};
+    maquilaData[sku][date][field]=val;
   }
+  // Update row totals live
+  updateRowTotals(inp, tableType);
+  updateColTotals(tableType);
   updateKPIs();
 }
-function updateKPIs() {
-  // Impresion packs from skuLog
-  var tPacks=skuLog.reduce(function(s,l){return s+l.packs},0);
-  var totalTargetPacks=SKUS.reduce(function(s,x){return s+x.totalPacks},0);
-  // Devices from maquilaData
-  var tDev=0;
-  SKUS.forEach(function(s){
-    if(maquilaData[s.sku]) Object.values(maquilaData[s.sku]).forEach(function(v){tDev+=v;});
+
+function updateRowTotals(inp, tableType) {
+  var row=inp.closest('tr'); if(!row) return;
+  // Find total-box and total-device cells (tagged with data-totalbox / data-totaldev)
+  var tBoxCell = row.querySelector('[data-totalbox]');
+  var tDevCell = row.querySelector('[data-totaldev]');
+  var sku = inp.getAttribute('data-sku');
+  var boxTotal=0, devTotal=0;
+  if(tableType==='imp') {
+    Object.values(impresionData[sku]||{}).forEach(function(d){boxTotal+=d.box||0; devTotal+=d.device||0;});
+    // Also read current inputs in case not yet committed
+    row.querySelectorAll('input[data-field="box"]').forEach(function(i){boxTotal+=parseInt(i.value)||0;});
+    // reset and recount only from inputs (already updated in-memory above so no double count, but safer to recount fresh)
+    boxTotal=0; devTotal=0;
+    Object.keys(impresionData[sku]||{}).forEach(function(d){boxTotal+=(impresionData[sku][d].box||0); devTotal+=(impresionData[sku][d].device||0);});
+  } else {
+    Object.keys(maquilaData[sku]||{}).forEach(function(d){boxTotal+=(maquilaData[sku][d].box||0); devTotal+=(maquilaData[sku][d].device||0);});
+  }
+  if(tBoxCell) tBoxCell.textContent = boxTotal>0?boxTotal.toLocaleString():'-';
+  if(tDevCell) tDevCell.textContent = devTotal>0?devTotal.toLocaleString():'-';
+  // Update % cells
+  var sku_obj = SKUS.find(function(s){return s.sku===sku;});
+  var pBoxCell = row.querySelector('[data-pctbox]');
+  var pDevCell = row.querySelector('[data-pctdev]');
+  if(sku_obj && pBoxCell) {
+    var pct = tableType==='imp' ? (sku_obj.totalBox>0?Math.round(boxTotal/sku_obj.totalBox*100):0)
+                                 : (sku_obj.totalBox>0?Math.round(boxTotal/sku_obj.totalBox*100):0);
+    pBoxCell.textContent=pct+'%';
+    pBoxCell.style.color=pct>=90?'var(--green)':pct>=50?'var(--amber)':'var(--red)';
+  }
+  if(sku_obj && pDevCell) {
+    var pct2 = tableType==='imp' ? (sku_obj.totalDevice>0?Math.round(devTotal/sku_obj.totalDevice*100):0)
+                                  : (sku_obj.totalDevice>0?Math.round(devTotal/sku_obj.totalDevice*100):0);
+    pDevCell.textContent=pct2+'%';
+    pDevCell.style.color=pct2>=90?'var(--green)':pct2>=50?'var(--amber)':'var(--red)';
+  }
+}
+
+function updateColTotals(tableType) {
+  var bodyId = tableType==='imp'?'imp-body':'maquila-body';
+  var tbody = document.getElementById(bodyId); if(!tbody) return;
+  var totalRow = tbody.querySelector('tr[data-totalrow]');
+  if(!totalRow) return;
+  var cols = tableType==='imp' ? IMP_COLS : MAQUILA_COLS;
+  cols.forEach(function(col, ci) {
+    if(col.type==='dom'||col.type==='feriado') return;
+    var boxSum=0, devSum=0;
+    SKUS.forEach(function(sku){
+      var data = tableType==='imp' ? impresionData[sku.sku] : maquilaData[sku.sku];
+      if(data && data[col.key]){boxSum+=data[col.key].box||0; devSum+=data[col.key].device||0;}
+    });
+    var bCell=totalRow.querySelector('[data-col-box="'+col.key+'"]');
+    var dCell=totalRow.querySelector('[data-col-dev="'+col.key+'"]');
+    if(bCell) bCell.textContent=boxSum>0?boxSum.toLocaleString():'-';
+    if(dCell) dCell.textContent=devSum>0?devSum.toLocaleString():'-';
   });
+  // Grand totals
+  var gtBox=totalRow.querySelector('[data-grand-box]');
+  var gtDev=totalRow.querySelector('[data-grand-dev]');
+  var totalBox=0,totalDev=0;
+  SKUS.forEach(function(sku){
+    var data=tableType==='imp'?impresionData[sku.sku]:maquilaData[sku.sku];
+    Object.values(data||{}).forEach(function(d){totalBox+=d.box||0;totalDev+=d.device||0;});
+  });
+  if(gtBox) gtBox.textContent=totalBox>0?totalBox.toLocaleString():'-';
+  if(gtDev) gtDev.textContent=totalDev>0?totalDev.toLocaleString():'-';
+}
+
+// ---- IMPRESION TABLE RENDER ----
+function renderImpresion() {
+  var thead=document.getElementById('imp-header');
+  var tbody=document.getElementById('imp-body');
+  if(!thead||!tbody) return;
+  var canEdit=isEditor();
+  var BG_DESC='background:#1B2A4A;color:#fff'; var BG_FIXED='background:#1B2A4A;color:#fff';
+  var BG_GREEN='background:#1A7A4A;color:#fff'; var BG_DOM='background:#777;color:#fff'; var BG_FER='background:#8B1A1A;color:#fff';
+
+  // Header row 1: Description (rowspan3) | Total Box (rowspan3) | Total Device (rowspan3) | %Box(rowspan3) | %Dev(rowspan3) | date cols (colspan 3 each) | TOTAL colspan2
+  var h1='<tr>';
+  h1+='<th rowspan="3" style="'+BG_DESC+';min-width:150px;text-align:left;padding:8px 10px;border:1px solid #2C3E63">DESCRIPCI\u00d3N</th>';
+  h1+='<th rowspan="3" style="'+BG_FIXED+';min-width:60px;text-align:center;border:1px solid #2C3E63">TOTAL<br>BOX</th>';
+  h1+='<th rowspan="3" style="'+BG_FIXED+';min-width:60px;text-align:center;border:1px solid #2C3E63">TOTAL<br>DEVICE</th>';
+  h1+='<th rowspan="3" style="'+BG_GREEN+';min-width:55px;text-align:center;border:1px solid #1A7A4A">% BOX</th>';
+  h1+='<th rowspan="3" style="'+BG_GREEN+';min-width:55px;text-align:center;border:1px solid #1A7A4A">% DEV.</th>';
+  IMP_COLS.forEach(function(col){
+    var bg=col.type==='dom'?BG_DOM:col.type==='feriado'?BG_FER:'background:#2C3E63;color:#fff';
+    h1+='<th colspan="3" style="'+bg+';text-align:center;min-width:165px;font-size:11px;padding:5px 3px;border:1px solid #444">'+col.label+'</th>';
+  });
+  h1+='<th colspan="2" style="'+BG_FIXED+';text-align:center;min-width:110px;border:1px solid #2C3E63">TOTAL</th>';
+  h1+='</tr>';
+
+  // Header row 2: sub-labels per date
+  var h2='<tr>';
+  IMP_COLS.forEach(function(col){
+    var bg=col.type==='dom'?BG_DOM:col.type==='feriado'?BG_FER:'background:#374C6E;color:#fff';
+    h2+='<th style="'+bg+';text-align:center;font-size:9px;padding:3px 2px;border:1px solid #444">Imp.<br>Box</th>';
+    h2+='<th style="'+bg+';text-align:center;font-size:9px;padding:3px 2px;border:1px solid #444">Imp.<br>Dev.</th>';
+    h2+='<th style="'+bg+';text-align:center;font-size:9px;padding:3px 2px;border:1px solid #444">Merma</th>';
+  });
+  h2+='<th style="'+BG_FIXED+';text-align:center;font-size:9px;padding:3px 2px;border:1px solid #2C3E63">Box</th>';
+  h2+='<th style="'+BG_FIXED+';text-align:center;font-size:9px;padding:3px 2px;border:1px solid #2C3E63">Dev.</th>';
+  h2+='</tr>';
+  thead.innerHTML=h1+h2;
+
+  // Body rows
+  var rows='';
+  // col totals
+  var colBoxTot={}, colDevTot={}, colMerTot={};
+  IMP_COLS.forEach(function(c){colBoxTot[c.key]=0;colDevTot[c.key]=0;colMerTot[c.key]=0;});
+  var grandBox=0, grandDev=0;
+
+  SKUS.forEach(function(sku,si){
+    var rowBox=0, rowDev=0;
+    var cells='';
+    IMP_COLS.forEach(function(col){
+      var d=(impresionData[sku.sku]&&impresionData[sku.sku][col.key])||{box:0,device:0,merma:0};
+      var isLocked=col.type==='dom'||col.type==='feriado';
+      var bg=col.type==='dom'?'background:#D8D8D8;':col.type==='feriado'?'background:#FFE0E0;':'';
+      cells+=mkInput(sku.sku,col.key,'box',d.box,canEdit,isLocked,bg);
+      cells+=mkInput(sku.sku,col.key,'device',d.device,canEdit,isLocked,bg);
+      cells+=mkInput(sku.sku,col.key,'merma',d.merma,canEdit,isLocked,bg);
+      rowBox+=d.box; rowDev+=d.device;
+      colBoxTot[col.key]+=d.box; colDevTot[col.key]+=d.device; colMerTot[col.key]+=(d.merma||0);
+    });
+    grandBox+=rowBox; grandDev+=rowDev;
+    var bPct=sku.totalBox>0?Math.round(rowBox/sku.totalBox*100):0;
+    var dPct=sku.totalDevice>0?Math.round(rowDev/sku.totalDevice*100):0;
+    var bClr=bPct>=90?'var(--green)':bPct>=50?'var(--amber)':'var(--red)';
+    var dClr=dPct>=90?'var(--green)':dPct>=50?'var(--amber)':'var(--red)';
+    var rbg=si%2===0?'#FFFFFF':'#F5F6F8';
+    rows+='<tr style="background:'+rbg+'">';
+    rows+='<td style="font-size:12px;font-weight:500;padding:5px 10px;border:1px solid #e0e0e0">'+sku.name+'</td>';
+    rows+='<td style="text-align:center;font-size:11px;font-family:DM Mono,monospace;border:1px solid #e0e0e0">'+sku.totalBox+'</td>';
+    rows+='<td style="text-align:center;font-size:11px;font-family:DM Mono,monospace;border:1px solid #e0e0e0">'+sku.totalDevice.toLocaleString()+'</td>';
+    rows+='<td data-pctbox style="text-align:center;font-size:11px;font-weight:700;color:'+bClr+';border:1px solid #e0e0e0">'+bPct+'%</td>';
+    rows+='<td data-pctdev style="text-align:center;font-size:11px;font-weight:700;color:'+dClr+';border:1px solid #e0e0e0">'+dPct+'%</td>';
+    rows+=cells;
+    rows+='<td data-totalbox style="text-align:center;font-size:11px;font-family:DM Mono,monospace;font-weight:600;background:#E8F0FB;border:1px solid #c0d0e8">'+(rowBox>0?rowBox.toLocaleString():'-')+'</td>';
+    rows+='<td data-totaldev style="text-align:center;font-size:11px;font-family:DM Mono,monospace;font-weight:600;background:#E8F0FB;border:1px solid #c0d0e8">'+(rowDev>0?rowDev.toLocaleString():'-')+'</td>';
+    rows+='</tr>';
+  });
+
+  // Total row
+  var totRow='<tr data-totalrow style="background:#E8EAED;font-weight:700">';
+  totRow+='<td style="padding:5px 10px;font-size:12px;border:1px solid #ccc">TOTAL</td>';
+  var totBox=SKUS.reduce(function(s,x){return s+x.totalBox},0);
+  var totDev=SKUS.reduce(function(s,x){return s+x.totalDevice},0);
+  var gBPct=totBox>0?Math.round(grandBox/totBox*100):0;
+  var gDPct=totDev>0?Math.round(grandDev/totDev*100):0;
+  totRow+='<td style="text-align:center;font-size:11px;font-family:DM Mono,monospace;border:1px solid #ccc">'+totBox+'</td>';
+  totRow+='<td style="text-align:center;font-size:11px;font-family:DM Mono,monospace;border:1px solid #ccc">'+totDev.toLocaleString()+'</td>';
+  totRow+='<td style="text-align:center;background:var(--green);color:#fff;font-size:11px;border:1px solid #ccc">'+gBPct+'%</td>';
+  totRow+='<td style="text-align:center;background:var(--green);color:#fff;font-size:11px;border:1px solid #ccc">'+gDPct+'%</td>';
+  IMP_COLS.forEach(function(col){
+    var bg=col.type==='dom'?'background:#C8C8C8':col.type==='feriado'?'background:#8B1A1A;color:#fff':'background:#E8EAED';
+    var bc=col.type==='feriado'?'color:#fff':'';
+    totRow+='<td data-col-box="'+col.key+'" style="'+bg+';'+bc+';text-align:center;font-size:11px;font-family:DM Mono,monospace;border:1px solid #ccc">'+(colBoxTot[col.key]>0?colBoxTot[col.key].toLocaleString():'-')+'</td>';
+    totRow+='<td data-col-dev="'+col.key+'" style="'+bg+';'+bc+';text-align:center;font-size:11px;font-family:DM Mono,monospace;border:1px solid #ccc">'+(colDevTot[col.key]>0?colDevTot[col.key].toLocaleString():'-')+'</td>';
+    totRow+='<td style="'+bg+';'+bc+';text-align:center;font-size:11px;font-family:DM Mono,monospace;border:1px solid #ccc">'+(colMerTot[col.key]>0?colMerTot[col.key].toLocaleString():'-')+'</td>';
+  });
+  totRow+='<td data-grand-box style="background:var(--navy);color:#fff;text-align:center;font-size:11px;font-family:DM Mono,monospace;border:1px solid #1B2A4A">'+(grandBox>0?grandBox.toLocaleString():'-')+'</td>';
+  totRow+='<td data-grand-dev style="background:var(--navy);color:#fff;text-align:center;font-size:11px;font-family:DM Mono,monospace;border:1px solid #1B2A4A">'+(grandDev>0?grandDev.toLocaleString():'-')+'</td>';
+  totRow+='</tr>';
+  tbody.innerHTML=rows+totRow;
+}
+
+// ---- MAQUILA TABLE RENDER ----
+function renderMaquila() {
+  var thead=document.getElementById('maquila-header');
+  var tbody=document.getElementById('maquila-body');
+  if(!thead||!tbody) return;
+  var canEdit=isEditor();
+  var BG_DESC='background:#1B2A4A;color:#fff'; var BG_FIXED='background:#1B2A4A;color:#fff';
+  var BG_GREEN='background:#1A7A4A;color:#fff'; var BG_DOM='background:#777;color:#fff'; var BG_FER='background:#8B1A1A;color:#fff';
+
+  // Header row 1
+  var h1='<tr>';
+  h1+='<th rowspan="2" style="'+BG_DESC+';min-width:150px;text-align:left;padding:8px 10px;border:1px solid #2C3E63">DESCRIPCI\u00d3N</th>';
+  h1+='<th rowspan="2" style="'+BG_FIXED+';min-width:60px;text-align:center;border:1px solid #2C3E63">TOTAL<br>BOX</th>';
+  h1+='<th rowspan="2" style="'+BG_FIXED+';min-width:65px;text-align:center;border:1px solid #2C3E63">TOTAL<br>DEVICE</th>';
+  h1+='<th rowspan="2" style="'+BG_GREEN+';min-width:55px;text-align:center;border:1px solid #1A7A4A">% BOX</th>';
+  h1+='<th rowspan="2" style="'+BG_GREEN+';min-width:55px;text-align:center;border:1px solid #1A7A4A">% DEV.</th>';
+  MAQUILA_COLS.forEach(function(col){
+    var bg=col.type==='dom'?BG_DOM:col.type==='feriado'?BG_FER:'background:#2C3E63;color:#fff';
+    h1+='<th colspan="2" style="'+bg+';text-align:center;min-width:110px;font-size:11px;padding:5px 3px;border:1px solid #444">'+col.label+'</th>';
+  });
+  h1+='<th colspan="2" style="'+BG_FIXED+';text-align:center;min-width:110px;border:1px solid #2C3E63">TOTAL</th>';
+  h1+='</tr>';
+
+  // Header row 2
+  var h2='<tr>';
+  MAQUILA_COLS.forEach(function(col){
+    var bg=col.type==='dom'?BG_DOM:col.type==='feriado'?BG_FER:'background:#374C6E;color:#fff';
+    h2+='<th style="'+bg+';text-align:center;font-size:9px;padding:3px 2px;border:1px solid #444">DEV.</th>';
+    h2+='<th style="'+bg+';text-align:center;font-size:9px;padding:3px 2px;border:1px solid #444">BOX</th>';
+  });
+  h2+='<th style="'+BG_FIXED+';text-align:center;font-size:9px;padding:3px 2px;border:1px solid #2C3E63">Dev.</th>';
+  h2+='<th style="'+BG_FIXED+';text-align:center;font-size:9px;padding:3px 2px;border:1px solid #2C3E63">Box</th>';
+  h2+='</tr>';
+  thead.innerHTML=h1+h2;
+
+  // Body
+  var rows='';
+  var colDevTot={}, colBoxTot={};
+  MAQUILA_COLS.forEach(function(c){colDevTot[c.key]=0;colBoxTot[c.key]=0;});
+  var grandDev=0, grandBox=0;
+
+  SKUS.forEach(function(sku,si){
+    var rowDev=0, rowBox=0;
+    var cells='';
+    MAQUILA_COLS.forEach(function(col){
+      var d=(maquilaData[sku.sku]&&maquilaData[sku.sku][col.key])||{box:0,device:0};
+      var isLocked=col.type==='dom'||col.type==='feriado';
+      var bg=col.type==='dom'?'background:#D8D8D8;':col.type==='feriado'?'background:#FFE0E0;':'';
+      cells+=mkMaqInput(sku.sku,col.key,'device',d.device,canEdit,isLocked,bg);
+      cells+=mkMaqInput(sku.sku,col.key,'box',d.box,canEdit,isLocked,bg);
+      rowDev+=d.device; rowBox+=d.box;
+      colDevTot[col.key]+=d.device; colBoxTot[col.key]+=d.box;
+    });
+    grandDev+=rowDev; grandBox+=rowBox;
+    var dPct=sku.totalDevice>0?Math.round(rowDev/sku.totalDevice*100):0;
+    var bPct=sku.totalBox>0?Math.round(rowBox/sku.totalBox*100):0;
+    var dClr=dPct>=90?'var(--green)':dPct>=50?'var(--amber)':'var(--red)';
+    var bClr=bPct>=90?'var(--green)':bPct>=50?'var(--amber)':'var(--red)';
+    var rbg=si%2===0?'#FFFFFF':'#F5F6F8';
+    rows+='<tr style="background:'+rbg+'">';
+    rows+='<td style="font-size:12px;font-weight:500;padding:5px 10px;border:1px solid #e0e0e0">'+sku.name+'</td>';
+    rows+='<td style="text-align:center;font-size:11px;font-family:DM Mono,monospace;border:1px solid #e0e0e0">'+sku.totalBox+'</td>';
+    rows+='<td style="text-align:center;font-size:11px;font-family:DM Mono,monospace;border:1px solid #e0e0e0">'+sku.totalDevice.toLocaleString()+'</td>';
+    rows+='<td data-pctbox style="text-align:center;font-size:11px;font-weight:700;color:'+bClr+';border:1px solid #e0e0e0">'+bPct+'%</td>';
+    rows+='<td data-pctdev style="text-align:center;font-size:11px;font-weight:700;color:'+dClr+';border:1px solid #e0e0e0">'+dPct+'%</td>';
+    rows+=cells;
+    rows+='<td data-totaldev style="text-align:center;font-size:11px;font-family:DM Mono,monospace;font-weight:600;background:#E8F0FB;border:1px solid #c0d0e8">'+(rowDev>0?rowDev.toLocaleString():'-')+'</td>';
+    rows+='<td data-totalbox style="text-align:center;font-size:11px;font-family:DM Mono,monospace;font-weight:600;background:#E8F0FB;border:1px solid #c0d0e8">'+(rowBox>0?rowBox.toLocaleString():'-')+'</td>';
+    rows+='</tr>';
+  });
+
+  // Total row
+  var totDev=SKUS.reduce(function(s,x){return s+x.totalDevice},0);
+  var totBox2=SKUS.reduce(function(s,x){return s+x.totalBox},0);
+  var gDPct=totDev>0?Math.round(grandDev/totDev*100):0;
+  var gBPct2=totBox2>0?Math.round(grandBox/totBox2*100):0;
+  var totRow='<tr data-totalrow style="background:#E8EAED;font-weight:700">';
+  totRow+='<td style="padding:5px 10px;font-size:12px;border:1px solid #ccc">TOTAL</td>';
+  totRow+='<td style="text-align:center;font-size:11px;font-family:DM Mono,monospace;border:1px solid #ccc">'+totBox2+'</td>';
+  totRow+='<td style="text-align:center;font-size:11px;font-family:DM Mono,monospace;border:1px solid #ccc">'+totDev.toLocaleString()+'</td>';
+  totRow+='<td style="text-align:center;background:var(--green);color:#fff;font-size:11px;border:1px solid #ccc">'+gBPct2+'%</td>';
+  totRow+='<td style="text-align:center;background:var(--green);color:#fff;font-size:11px;border:1px solid #ccc">'+gDPct+'%</td>';
+  MAQUILA_COLS.forEach(function(col){
+    var bg=col.type==='dom'?'background:#C8C8C8':col.type==='feriado'?'background:#8B1A1A;color:#fff':'background:#E8EAED';
+    var bc=col.type==='feriado'?'color:#fff':'';
+    totRow+='<td data-col-dev="'+col.key+'" style="'+bg+';'+bc+';text-align:center;font-size:11px;font-family:DM Mono,monospace;border:1px solid #ccc">'+(colDevTot[col.key]>0?colDevTot[col.key].toLocaleString():'-')+'</td>';
+    totRow+='<td data-col-box="'+col.key+'" style="'+bg+';'+bc+';text-align:center;font-size:11px;font-family:DM Mono,monospace;border:1px solid #ccc">'+(colBoxTot[col.key]>0?colBoxTot[col.key].toLocaleString():'-')+'</td>';
+  });
+  totRow+='<td data-grand-dev style="background:var(--navy);color:#fff;text-align:center;font-size:11px;font-family:DM Mono,monospace;border:1px solid #1B2A4A">'+(grandDev>0?grandDev.toLocaleString():'-')+'</td>';
+  totRow+='<td data-grand-box style="background:var(--navy);color:#fff;text-align:center;font-size:11px;font-family:DM Mono,monospace;border:1px solid #1B2A4A">'+(grandBox>0?grandBox.toLocaleString():'-')+'</td>';
+  totRow+='</tr>';
+  tbody.innerHTML=rows+totRow;
+}
+function updateKPIs() {
+  // Impresion box totals
+  var tImpBox=0, tImpDev=0;
+  SKUS.forEach(function(s){
+    Object.values(impresionData[s.sku]||{}).forEach(function(d){tImpBox+=d.box||0;tImpDev+=d.device||0;});
+  });
+  // Maquila device totals
+  var tMaqBox=0, tMaqDev=0;
+  SKUS.forEach(function(s){
+    Object.values(maquilaData[s.sku]||{}).forEach(function(d){tMaqBox+=d.box||0;tMaqDev+=d.device||0;});
+  });
+  var totalTargetBox=SKUS.reduce(function(s,x){return s+x.totalBox},0);
+  var totalTargetDev=SKUS.reduce(function(s,x){return s+x.totalDevice},0);
   var sDone=SKUS.filter(function(s){
-    var sp=skuLog.filter(function(l){return l.sku===s.sku}).reduce(function(t,l){return t+l.packs},0);
-    return sp>=s.totalPacks;
+    var sb=Object.values(impresionData[s.sku]||{}).reduce(function(t,d){return t+(d.box||0);},0);
+    return sb>=s.totalBox;
   }).length;
-  var rPct=TOTAL_DEVICES>0?Math.round(tDev/TOTAL_DEVICES*100):0;
+  var rPct=totalTargetDev>0?Math.round(tMaqDev/totalTargetDev*100):0;
   var today=new Date().toISOString().split('T')[0];
-  var tl=skuLog.filter(function(l){return l.fecha===today});
-  document.getElementById('kpi-devices').textContent=tDev.toLocaleString();
-  document.getElementById('kpi-devices-sub').textContent='de '+TOTAL_DEVICES.toLocaleString()+' total';
+  // KPI cards
+  document.getElementById('kpi-devices').textContent=tMaqDev.toLocaleString();
+  document.getElementById('kpi-devices-sub').textContent='de '+totalTargetDev.toLocaleString()+' total';
   document.getElementById('kpi-devices-bar').style.width=Math.min(100,rPct)+'%';
   document.getElementById('kpi-skus').textContent=sDone+' / 4';
-  document.getElementById('kpi-skus-sub').textContent=(totalTargetPacks>0?Math.round(tPacks/totalTargetPacks*100):0)+'% de packs impresos';
+  document.getElementById('kpi-skus-sub').textContent=(totalTargetBox>0?Math.round(tImpBox/totalTargetBox*100):0)+'% de boxes impresos';
   document.getElementById('kpi-skus-bar').style.width=(sDone/4*100)+'%';
   document.getElementById('kpi-repack').textContent=rPct+'%';
   document.getElementById('kpi-repack-bar').style.width=rPct+'%';
   document.getElementById('kpi-obs').textContent=observations.length;
   document.getElementById('kpi-obs-bar').style.width=Math.min(100,observations.length*5)+'%';
-  document.getElementById('prod-packs').textContent=tl.reduce(function(s,l){return s+l.packs},0).toLocaleString();
-  var todayDev=0;
-  SKUS.forEach(function(s){if(maquilaData[s.sku]&&maquilaData[s.sku][today])todayDev+=maquilaData[s.sku][today];});
-  document.getElementById('prod-devices').textContent=todayDev.toLocaleString();
+  // Today production
+  var todayImpBox=0,todayMaqDev=0;
+  SKUS.forEach(function(s){
+    if(impresionData[s.sku]&&impresionData[s.sku][today]) todayImpBox+=(impresionData[s.sku][today].box||0);
+    if(maquilaData[s.sku]&&maquilaData[s.sku][today]) todayMaqDev+=(maquilaData[s.sku][today].device||0);
+  });
+  document.getElementById('prod-packs').textContent=todayImpBox.toLocaleString();
+  document.getElementById('prod-devices').textContent=todayMaqDev.toLocaleString();
   document.getElementById('prod-obs').textContent=observations.filter(function(o){return o.fecha===today}).length;
 }
 function renderObservations() {
@@ -977,20 +1198,34 @@ function renderObservations() {
 // ===== EXCEL EXPORT =====
 function exportToExcel() {
   var wb=XLSX.utils.book_new();
-  var tDev=skuLog.reduce(function(s,l){return s+l.devices},0);
-  var tPacks=skuLog.reduce(function(s,l){return s+l.packs},0);
-  var rPct=Math.round(tDev/TOTAL_DEVICES*100);
-  var wsKPI=XLSX.utils.aoa_to_sheet([['REPORTE DE AVANCE - SERVICIO REPACK VUSE'],['Generado:',new Date().toLocaleString('es-PE')],[],['KPI','Valor','Total','% Avance'],['Devices Reempacados',tDev,TOTAL_DEVICES,rPct+'%'],['Packs Impresos',tPacks,SKUS.reduce(function(s,x){return s+x.totalPacks},0),''],['Maquila/Repack %',rPct+'%','',''],['Observaciones',observations.length,'','']]);
+  var totBox=SKUS.reduce(function(s,x){return s+x.totalBox},0);
+  var totDev=SKUS.reduce(function(s,x){return s+x.totalDevice},0);
+  var tImpBox=0,tImpDev=0,tMaqBox=0,tMaqDev=0;
+  SKUS.forEach(function(s){
+    Object.values(impresionData[s.sku]||{}).forEach(function(d){tImpBox+=d.box||0;tImpDev+=d.device||0;});
+    Object.values(maquilaData[s.sku]||{}).forEach(function(d){tMaqBox+=d.box||0;tMaqDev+=d.device||0;});
+  });
+  var wsKPI=XLSX.utils.aoa_to_sheet([['REPORTE DE AVANCE - SERVICIO REPACK VUSE'],['Generado:',new Date().toLocaleString('es-PE')],[],
+    ['KPI','Avance','Total','%'],
+    ['Impresion Box',tImpBox,totBox,Math.round(tImpBox/totBox*100)+'%'],
+    ['Impresion Device',tImpDev,totDev,Math.round(tImpDev/totDev*100)+'%'],
+    ['Maquila Box',tMaqBox,totBox,Math.round(tMaqBox/totBox*100)+'%'],
+    ['Maquila Device',tMaqDev,totDev,Math.round(tMaqDev/totDev*100)+'%'],
+    ['Observaciones',observations.length,'','']]);
   XLSX.utils.book_append_sheet(wb,wsKPI,'Resumen KPIs');
   var bc={'VUSE 3K Blueberry Ice':'Q51565195L','VUSE 3K Grape Ice':'Q51264646L','VUSE GO 1K Strawberry Ice':'Q52065700L','VUSE 3K Green Apple':'Q51254645L'};
   var tc={'VUSE 3K Blueberry Ice':'RQPE5F05DDTL','VUSE 3K Grape Ice':'RQPE5E06DDTL','VUSE GO 1K Strawberry Ice':'RQPE5G25DDOL','VUSE 3K Green Apple':'RQPE5E05DDTL'};
-  var wsSKU=XLSX.utils.aoa_to_sheet([['SKU','Descripcion','Total Packs','Total Devices','Batch Code','Trazabilidad','Prioridad']].concat(SKUS.map(function(s){return[s.sku,s.name,s.totalPacks,s.totalDevices,bc[s.name]||'',tc[s.name]||'',s.prioridad]})));
+  var wsSKU=XLSX.utils.aoa_to_sheet([['SKU','Descripcion','Total Box','Total Device','Batch Code','Trazabilidad','Prioridad']].concat(SKUS.map(function(s){return[s.sku,s.name,s.totalBox,s.totalDevice,bc[s.name]||'',tc[s.name]||'',s.prioridad]})));
   XLSX.utils.book_append_sheet(wb,wsSKU,'SKUs Referencia');
-  var wsLog=XLSX.utils.aoa_to_sheet([['Fecha','SKU','Descripcion','Packs','Devices','Notas']].concat(skuLog.map(function(l){return[l.fecha,l.sku,l.skuName,l.packs,l.devices,l.notas]})));
-  XLSX.utils.book_append_sheet(wb,wsLog,'Log Produccion');
+  var impRows=[['Fecha','SKU','Descripcion','Imp Box','Imp Device','Merma']];
+  SKUS.forEach(function(s){ Object.keys(impresionData[s.sku]||{}).forEach(function(d){var v=impresionData[s.sku][d];impRows.push([d,s.sku,s.name,v.box,v.device,v.merma||0]);});});
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(impRows),'Impresion Log');
+  var maqRows=[['Fecha','SKU','Descripcion','Maq Box','Maq Device']];
+  SKUS.forEach(function(s){ Object.keys(maquilaData[s.sku]||{}).forEach(function(d){var v=maquilaData[s.sku][d];maqRows.push([d,s.sku,s.name,v.box||0,v.device||0]);});});
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(maqRows),'Maquila Log');
   var wsObs=XLSX.utils.aoa_to_sheet([['Fecha','SKU','Descripcion','Tipo','Cantidad']].concat(observations.map(function(o){return[o.fecha,o.sku,o.desc,o.tipo,o.cant]})));
   XLSX.utils.book_append_sheet(wb,wsObs,'Observaciones');
-  var gH=['Actividad','Cant. Packs','Dias Activos','21-Abr','22-Abr','23-Abr','24-Abr','25-Abr','26-Abr(D)','27-Abr','28-Abr','29-Abr','30-Abr','1-May(F)','2-May','3-May(D)','4-May','Total'];
+  var gH=['Actividad','Cant.','Dias','21-Abr','22-Abr','23-Abr','24-Abr','25-Abr','26-Abr','27-Abr','28-Abr','29-Abr','30-Abr','1-May','2-May','3-May','4-May','Total'];
   var wsG=XLSX.utils.aoa_to_sheet([gH].concat(GANTT_ROWS.map(function(r){return[r.label,r.packs,countActiveDays(r.days)].concat(r.days).concat([sumDays(r.days)])})));
   XLSX.utils.book_append_sheet(wb,wsG,'Gantt Ejecucion');
   XLSX.writeFile(wb,'TT_Audit_Repack_VUSE_'+new Date().toISOString().split('T')[0]+'.xlsx');

@@ -372,6 +372,35 @@ function setSyncStatus(state, text) {
   lbl.textContent = text;
 }
 
+function diagnosSheet() {
+  setSyncStatus('saving','Consultando sheet...');
+  fetch(API_URL + '?action=all', {redirect:'follow'})
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var msg = '=== DIAGNÓSTICO APPS SCRIPT ===\n\n';
+      msg += 'OK: ' + d.ok + '\n';
+      msg += 'gantt: ' + (d.gantt ? d.gantt.length + ' filas' : 'NO EXISTE') + '\n';
+      msg += 'imp (impresion_log): ' + (d.imp ? d.imp.length + ' filas' : 'NO EXISTE — apps script desactualizado') + '\n';
+      msg += 'maq (maquila_log): ' + (d.maq ? d.maq.length + ' filas' : 'NO EXISTE — apps script desactualizado') + '\n';
+      msg += 'obs: ' + (d.obs ? d.obs.length + ' filas' : 'NO EXISTE') + '\n';
+      if(d.imp && d.imp.length > 1) {
+        msg += '\n--- Filas de impresion_log ---\n';
+        d.imp.slice(1).forEach(function(r){ msg += r.join(' | ') + '\n'; });
+      }
+      if(d.maq && d.maq.length > 1) {
+        msg += '\n--- Filas de maquila_log ---\n';
+        d.maq.slice(1).forEach(function(r){ msg += r.join(' | ') + '\n'; });
+      }
+      if(d.error) msg += '\nERROR: ' + d.error;
+      alert(msg);
+      setSyncStatus('ok','Diagnóstico completo');
+    })
+    .catch(function(err){
+      alert('Error al conectar con el Apps Script:\n' + err.toString());
+      setSyncStatus('err','Error');
+    });
+}
+
 // ===== API CALLS =====
 function apiGet(action, cb) {
   if(!API_URL || API_URL.indexOf('PEGA_AQUI') > -1) { cb(null); return; }
@@ -425,14 +454,24 @@ function loadFromSheet() {
   apiGet('all', function(data) {
     if(!data) { setSyncStatus('err','Offline'); return; }
 
-    // Load gantt (rows 1+ skip header)
+    console.log('Sheet data received:', JSON.stringify({
+      hasGantt: !!(data.gantt && data.gantt.length),
+      hasImp:   !!(data.imp   && data.imp.length),
+      hasMaq:   !!(data.maq   && data.maq.length),
+      hasObs:   !!(data.obs   && data.obs.length),
+      hasLog:   !!(data.log   && data.log.length),
+      impRows:  data.imp   ? data.imp.length   : 0,
+      maqRows:  data.maq   ? data.maq.length   : 0,
+    }));
+
+    // Load gantt
     if(data.gantt && data.gantt.length > 1) {
       for(var ri=0; ri<GANTT_ROWS.length; ri++) {
         var sheetRow = data.gantt[ri+1];
         if(!sheetRow) continue;
         GANTT_ROWS[ri].label = sheetRow[0] || GANTT_ROWS[ri].label;
         for(var c=0; c<15; c++) {
-          GANTT_ROWS[ri].days[c] = parseInt(sheetRow[c+2]) || 0; // col 0=act,1=packs, dates start col 2
+          GANTT_ROWS[ri].days[c] = parseInt(sheetRow[c+2]) || 0;
         }
       }
     }
@@ -440,14 +479,16 @@ function loadFromSheet() {
     // Load impresion_log
     if(data.imp && data.imp.length > 1) {
       initImpresionFromSheet(data.imp);
+      console.log('Impresion loaded from imp sheet, rows:', data.imp.length - 1);
     }
 
     // Load maquila_log
     if(data.maq && data.maq.length > 1) {
       initMaquilaFromSheet(data.maq);
+      console.log('Maquila loaded from maq sheet, rows:', data.maq.length - 1);
     }
 
-    // Legacy: also load old log_produccion if present
+    // Legacy log_produccion fallback
     if(data.log && data.log.length > 1) {
       skuLog = [];
       for(var i=1; i<data.log.length; i++) {
@@ -457,9 +498,10 @@ function loadFromSheet() {
         skuLog.push({fecha:fecha, sku:String(r[1]), skuName:String(r[2]), packs:parseInt(r[3])||0, devices:parseInt(r[4])||0, notas:String(r[5]||'')});
       }
       initFromLegacyLog();
+      console.log('Legacy log loaded, rows:', skuLog.length);
     }
 
-    // Load observaciones (skip header)
+    // Load observaciones
     if(data.obs && data.obs.length > 1) {
       observations = [];
       for(var i=1; i<data.obs.length; i++) {

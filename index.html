@@ -732,7 +732,7 @@ function saveObservation() {
 // =====================================================
 // DATA STRUCTURES
 // impresionData[skuCode][dateKey] = {box, device, merma}
-// maquilaData[skuCode][dateKey]   = {box, device}
+// maquilaData[skuCode][dateKey]   = {box, device, merma}
 // =====================================================
 var impresionData = {};
 var maquilaData   = {};
@@ -792,7 +792,7 @@ function initMaquilaFromSheet(rows) {
     var fecha = r[0] instanceof Date ? r[0].toISOString().split('T')[0] : String(r[0]).trim();
     var sku=String(r[1]);
     if(!maquilaData[sku]) maquilaData[sku]={};
-    maquilaData[sku][fecha]={box:parseInt(r[3])||0, device:parseInt(r[4])||0};
+    maquilaData[sku][fecha]={box:parseInt(r[3])||0, device:parseInt(r[4])||0, merma:parseInt(r[5])||0};
   }
 }
 
@@ -812,7 +812,7 @@ function initFromLegacyLog() {
     }
     if(l.devices>0 && l.notas==='maquila-update'){
       if(!maquilaData[l.sku]) maquilaData[l.sku]={};
-      if(!maquilaData[l.sku][l.fecha]) maquilaData[l.sku][l.fecha]={box:0,device:0};
+      if(!maquilaData[l.sku][l.fecha]) maquilaData[l.sku][l.fecha]={box:0,device:0,merma:0};
       maquilaData[l.sku][l.fecha].device += l.devices;
     }
   });
@@ -835,7 +835,7 @@ function getMaqInputs() {
   document.querySelectorAll('#maquila-body input[data-sku][data-date][data-field]').forEach(function(inp){
     var sku=inp.getAttribute('data-sku'), date=inp.getAttribute('data-date'), field=inp.getAttribute('data-field');
     if(!result[sku]) result[sku]={};
-    if(!result[sku][date]) result[sku][date]={box:0,device:0};
+    if(!result[sku][date]) result[sku][date]={box:0,device:0,merma:0};
     result[sku][date][field]=parseInt(inp.value)||0;
   });
   return result;
@@ -889,7 +889,7 @@ function saveMaquilaData() {
     Object.keys(data[sku]).forEach(function(date){
       var v=data[sku][date];
       var skuObj=SKUS.find(function(s){return s.sku===sku;});
-      apiPost({action:'save_maquila',fecha:date,sku:sku,skuName:skuObj?skuObj.name:sku,maq_box:v.box||0,maq_device:v.device||0},null);
+      apiPost({action:'save_maquila',fecha:date,sku:sku,skuName:skuObj?skuObj.name:sku,maq_box:v.box||0,maq_device:v.device||0,maq_merma:v.merma||0},null);
       saved++;
     });
   });
@@ -934,7 +934,7 @@ function onTableInput(inp, tableType) {
     impresionData[sku][date][field]=val;
   } else {
     if(!maquilaData[sku]) maquilaData[sku]={};
-    if(!maquilaData[sku][date]) maquilaData[sku][date]={box:0,device:0};
+    if(!maquilaData[sku][date]) maquilaData[sku][date]={box:0,device:0,merma:0};
     maquilaData[sku][date][field]=val;
   }
   // Update row totals live
@@ -986,17 +986,19 @@ function updateColTotals(tableType) {
   var totalRow = tbody.querySelector('tr[data-totalrow]');
   if(!totalRow) return;
   var cols = tableType==='imp' ? IMP_COLS : MAQUILA_COLS;
-  cols.forEach(function(col, ci) {
+  cols.forEach(function(col) {
     if(col.type==='dom'||col.type==='feriado') return;
-    var boxSum=0, devSum=0;
+    var boxSum=0, devSum=0, merSum=0;
     SKUS.forEach(function(sku){
       var data = tableType==='imp' ? impresionData[sku.sku] : maquilaData[sku.sku];
-      if(data && data[col.key]){boxSum+=data[col.key].box||0; devSum+=data[col.key].device||0;}
+      if(data && data[col.key]){boxSum+=data[col.key].box||0; devSum+=data[col.key].device||0; merSum+=data[col.key].merma||0;}
     });
     var bCell=totalRow.querySelector('[data-col-box="'+col.key+'"]');
     var dCell=totalRow.querySelector('[data-col-dev="'+col.key+'"]');
+    var mCell=totalRow.querySelector('[data-col-mer="'+col.key+'"]');
     if(bCell) bCell.textContent=boxSum>0?boxSum.toLocaleString():'-';
     if(dCell) dCell.textContent=devSum>0?devSum.toLocaleString():'-';
+    if(mCell) mCell.textContent=merSum>0?merSum.toLocaleString():'-';
   });
   // Grand totals
   var gtBox=totalRow.querySelector('[data-grand-box]');
@@ -1126,7 +1128,7 @@ function renderMaquila() {
   h1+='<th rowspan="2" style="'+BG_GREEN+';min-width:55px;text-align:center;border:1px solid #1A7A4A">% DEV.</th>';
   MAQUILA_COLS.forEach(function(col){
     var bg=col.type==='dom'?BG_DOM:col.type==='feriado'?BG_FER:'background:#2C3E63;color:#fff';
-    h1+='<th colspan="2" style="'+bg+';text-align:center;min-width:110px;font-size:11px;padding:5px 3px;border:1px solid #444">'+col.label+'</th>';
+    h1+='<th colspan="3" style="'+bg+';text-align:center;min-width:165px;font-size:11px;padding:5px 3px;border:1px solid #444">'+col.label+'</th>';
   });
   h1+='<th colspan="2" style="'+BG_FIXED+';text-align:center;min-width:110px;border:1px solid #2C3E63">TOTAL</th>';
   h1+='</tr>';
@@ -1137,6 +1139,7 @@ function renderMaquila() {
     var bg=col.type==='dom'?BG_DOM:col.type==='feriado'?BG_FER:'background:#374C6E;color:#fff';
     h2+='<th style="'+bg+';text-align:center;font-size:9px;padding:3px 2px;border:1px solid #444">DEV.</th>';
     h2+='<th style="'+bg+';text-align:center;font-size:9px;padding:3px 2px;border:1px solid #444">BOX</th>';
+    h2+='<th style="'+bg+';text-align:center;font-size:9px;padding:3px 2px;border:1px solid #444">Merma</th>';
   });
   h2+='<th style="'+BG_FIXED+';text-align:center;font-size:9px;padding:3px 2px;border:1px solid #2C3E63">Dev.</th>';
   h2+='<th style="'+BG_FIXED+';text-align:center;font-size:9px;padding:3px 2px;border:1px solid #2C3E63">Box</th>';
@@ -1145,21 +1148,22 @@ function renderMaquila() {
 
   // Body
   var rows='';
-  var colDevTot={}, colBoxTot={};
-  MAQUILA_COLS.forEach(function(c){colDevTot[c.key]=0;colBoxTot[c.key]=0;});
+  var colDevTot={}, colBoxTot={}, colMerTot={};
+  MAQUILA_COLS.forEach(function(c){colDevTot[c.key]=0;colBoxTot[c.key]=0;colMerTot[c.key]=0;});
   var grandDev=0, grandBox=0;
 
   SKUS.forEach(function(sku,si){
     var rowDev=0, rowBox=0;
     var cells='';
     MAQUILA_COLS.forEach(function(col){
-      var d=(maquilaData[sku.sku]&&maquilaData[sku.sku][col.key])||{box:0,device:0};
+      var d=(maquilaData[sku.sku]&&maquilaData[sku.sku][col.key])||{box:0,device:0,merma:0};
       var isLocked=col.type==='dom'||col.type==='feriado';
       var bg=col.type==='dom'?'background:#D8D8D8;':col.type==='feriado'?'background:#FFE0E0;':'';
       cells+=mkMaqInput(sku.sku,col.key,'device',d.device,canEdit,isLocked,bg);
       cells+=mkMaqInput(sku.sku,col.key,'box',d.box,canEdit,isLocked,bg);
+      cells+=mkMaqInput(sku.sku,col.key,'merma',d.merma,canEdit,isLocked,bg);
       rowDev+=d.device; rowBox+=d.box;
-      colDevTot[col.key]+=d.device; colBoxTot[col.key]+=d.box;
+      colDevTot[col.key]+=d.device; colBoxTot[col.key]+=d.box; colMerTot[col.key]+=(d.merma||0);
     });
     grandDev+=rowDev; grandBox+=rowBox;
     var dPct=sku.totalDevice>0?Math.round(rowDev/sku.totalDevice*100):0;
@@ -1195,6 +1199,7 @@ function renderMaquila() {
     var bc=col.type==='feriado'?'color:#fff':'';
     totRow+='<td data-col-dev="'+col.key+'" style="'+bg+';'+bc+';text-align:center;font-size:11px;font-family:DM Mono,monospace;border:1px solid #ccc">'+(colDevTot[col.key]>0?colDevTot[col.key].toLocaleString():'-')+'</td>';
     totRow+='<td data-col-box="'+col.key+'" style="'+bg+';'+bc+';text-align:center;font-size:11px;font-family:DM Mono,monospace;border:1px solid #ccc">'+(colBoxTot[col.key]>0?colBoxTot[col.key].toLocaleString():'-')+'</td>';
+    totRow+='<td data-col-mer="'+col.key+'" style="'+bg+';'+bc+';text-align:center;font-size:11px;font-family:DM Mono,monospace;border:1px solid #ccc">'+(colMerTot[col.key]>0?colMerTot[col.key].toLocaleString():'-')+'</td>';
   });
   totRow+='<td data-grand-dev style="background:var(--navy);color:#fff;text-align:center;font-size:11px;font-family:DM Mono,monospace;border:1px solid #1B2A4A">'+(grandDev>0?grandDev.toLocaleString():'-')+'</td>';
   totRow+='<td data-grand-box style="background:var(--navy);color:#fff;text-align:center;font-size:11px;font-family:DM Mono,monospace;border:1px solid #1B2A4A">'+(grandBox>0?grandBox.toLocaleString():'-')+'</td>';
@@ -1280,8 +1285,8 @@ function exportToExcel() {
   var impRows=[['Fecha','SKU','Descripcion','Imp Box','Imp Device','Merma']];
   SKUS.forEach(function(s){ Object.keys(impresionData[s.sku]||{}).forEach(function(d){var v=impresionData[s.sku][d];impRows.push([d,s.sku,s.name,v.box,v.device,v.merma||0]);});});
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(impRows),'Impresion Log');
-  var maqRows=[['Fecha','SKU','Descripcion','Maq Box','Maq Device']];
-  SKUS.forEach(function(s){ Object.keys(maquilaData[s.sku]||{}).forEach(function(d){var v=maquilaData[s.sku][d];maqRows.push([d,s.sku,s.name,v.box||0,v.device||0]);});});
+  var maqRows=[['Fecha','SKU','Descripcion','Maq Box','Maq Device','Merma']];
+  SKUS.forEach(function(s){ Object.keys(maquilaData[s.sku]||{}).forEach(function(d){var v=maquilaData[s.sku][d];maqRows.push([d,s.sku,s.name,v.box||0,v.device||0,v.merma||0]);});});
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(maqRows),'Maquila Log');
   var wsObs=XLSX.utils.aoa_to_sheet([['Fecha','SKU','Descripcion','Tipo','Cantidad']].concat(observations.map(function(o){return[o.fecha,o.sku,o.desc,o.tipo,o.cant]})));
   XLSX.utils.book_append_sheet(wb,wsObs,'Observaciones');
